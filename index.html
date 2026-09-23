@@ -1,0 +1,273 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Domain Enrichment — Keepa Seller Leads</title>
+<style>
+  :root {
+    --bg: #f6f7f9;
+    --card: #ffffff;
+    --border: #e2e5e9;
+    --text: #1a1d21;
+    --muted: #6b7280;
+    --accent: #2563eb;
+    --accent-hover: #1d4ed8;
+    --green: #16a34a;
+    --green-hover: #15803d;
+    --gray: #6b7280;
+    --gray-hover: #4b5563;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    padding: 24px 16px;
+  }
+  .wrap { max-width: 640px; margin: 0 auto; }
+  h1 { font-size: 18px; font-weight: 600; margin: 0 0 4px; }
+  .subtitle { color: var(--muted); font-size: 13px; margin: 0 0 20px; }
+  .card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 20px;
+    margin-bottom: 16px;
+  }
+  .revenue {
+    display: inline-block;
+    background: #ecfdf5;
+    color: var(--green);
+    font-weight: 700;
+    font-size: 20px;
+    padding: 4px 12px;
+    border-radius: 8px;
+    margin-bottom: 12px;
+  }
+  .business-name { font-size: 20px; font-weight: 700; margin: 0 0 2px; }
+  .seller-name { color: var(--muted); font-size: 14px; margin: 0 0 12px; }
+  .field { margin: 10px 0; font-size: 14px; }
+  .field-label { color: var(--muted); display: inline-block; min-width: 90px; }
+  .seller-link a { color: var(--accent); text-decoration: none; }
+  .seller-link a:hover { text-decoration: underline; }
+  .address-line { line-height: 1.5; }
+  .top-product { background: #f9fafb; border-radius: 8px; padding: 10px 12px; margin-top: 10px; font-size: 13px; }
+  .top-product .brand { font-weight: 600; }
+  .input-row { display: flex; gap: 8px; margin-top: 16px; }
+  input[type="text"] {
+    flex: 1;
+    padding: 10px 12px;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    font-size: 14px;
+  }
+  input[type="text"]:focus { outline: 2px solid var(--accent); border-color: transparent; }
+  .normalized-preview { font-size: 12px; color: var(--muted); margin-top: 6px; min-height: 16px; }
+  .normalized-preview .domain { color: var(--green); font-weight: 600; }
+  button {
+    border: none;
+    border-radius: 8px;
+    padding: 10px 16px;
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+  }
+  #saveBtn { background: var(--accent); color: white; }
+  #saveBtn:hover { background: var(--accent-hover); }
+  #saveBtn:disabled { background: #93c5fd; cursor: not-allowed; }
+  .actions-row { display: flex; justify-content: space-between; margin-top: 14px; }
+  #notFoundBtn { background: var(--bg); color: var(--gray); border: 1px solid var(--border); }
+  #notFoundBtn:hover { background: #eceef1; color: var(--gray-hover); }
+  .status { font-size: 13px; margin-top: 10px; min-height: 18px; }
+  .status.error { color: #dc2626; }
+  .status.success { color: var(--green); }
+  .empty-state, .loading-state { text-align: center; color: var(--muted); padding: 40px 20px; }
+  .counter { color: var(--muted); font-size: 12px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Domain Enrichment</h1>
+  <p class="subtitle">ICP-qualified Keepa seller leads, one at a time. Find their website, paste it below.</p>
+
+  <div id="content" class="card">
+    <div class="loading-state">Loading…</div>
+  </div>
+
+  <p class="counter" id="counter"></p>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+<script>
+  // ---- Config ----
+  // Safe to be public: the anon key only unlocks the 3 narrow functions below
+  // (RLS blocks everything else). Get it from Supabase dashboard -> Settings -> API.
+  const SUPABASE_URL = "https://gqxehhpbujzbzcharsio.supabase.co";
+  const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImdxeGVoaHBidWp6YnpjaGFyc2lvIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODk3NTkwODAsImV4cCI6MjEwNTMzNTA4MH0.ZOp2G8Hdk41uFxZlkomO_wlPfB8itFem31tzNM7y4Oo";
+
+  const supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+  // ---- Domain normalization — exact port of lrt-amazon-crm/scripts/import.ts's
+  // hostOf/rootDomain, so values stored here match that project's convention. ----
+  const PLATFORM_HOSTS = ["myshopify.com", "wixsite.com", "squarespace.com", "webflow.io", "github.io"];
+
+  function hostOf(raw) {
+    let u = (raw || "").trim().toLowerCase();
+    if (!u) return "";
+    if (!u.includes("//")) u = "http://" + u;
+    try {
+      return new URL(u).hostname.replace(/^www\./, "");
+    } catch {
+      return "";
+    }
+  }
+
+  function rootDomain(host) {
+    if (!host) return "";
+    if (PLATFORM_HOSTS.some((p) => host.endsWith("." + p) || host === p)) return host;
+    const parts = host.split(".");
+    if (parts.length <= 2) return host;
+    const tld = parts[parts.length - 1];
+    const sld = parts[parts.length - 2];
+    const keep = tld.length === 2 && ["co", "com", "org", "net", "gov", "ac"].includes(sld) ? 3 : 2;
+    return parts.slice(-keep).join(".");
+  }
+
+  function normalizeDomain(raw) {
+    return rootDomain(hostOf(raw));
+  }
+
+  // ---- App state ----
+  let current = null;
+  let enrichedCount = 0;
+
+  const content = document.getElementById("content");
+  const counter = document.getElementById("counter");
+
+  function formatAddress(address) {
+    if (!Array.isArray(address)) return "";
+    // Keepa order: [street, city, state, zip, country]
+    return address.filter(Boolean).join(", ");
+  }
+
+  function formatRevenue(v) {
+    if (v === null || v === undefined) return "n/a";
+    return "$" + Number(v).toLocaleString(undefined, { maximumFractionDigits: 0 }) + "/mo";
+  }
+
+  function renderEmpty() {
+    content.innerHTML = `<div class="empty-state">Queue is empty — every ICP-qualified seller has a domain result already. Nothing left to enrich right now.</div>`;
+    counter.textContent = "";
+  }
+
+  function renderSeller(s) {
+    current = s;
+    content.innerHTML = `
+      <div class="revenue">${formatRevenue(s.estimated_monthly_revenue_min_usd)}</div>
+      <div class="business-name">${s.seller_name || "(no name)"}</div>
+
+      <div class="field seller-link">
+        <span class="field-label">Seller link</span>
+        <a href="${s.seller_link}" target="_blank" rel="noopener">${s.seller_link}</a>
+      </div>
+      <div class="field">
+        <span class="field-label">Business</span>${s.business_name || "n/a"}
+      </div>
+      <div class="field address-line">
+        <span class="field-label">Address</span>${formatAddress(s.address)}${s.address_country ? " (" + s.address_country + ")" : ""}
+      </div>
+      <div class="field">
+        <span class="field-label">Brand</span>${s.top_product_brand || "n/a"}${s.top_product_title ? " — " + s.top_product_title : ""}
+      </div>
+
+      <div class="input-row">
+        <input type="text" id="domainInput" placeholder="Paste website / domain here" autocomplete="off" />
+        <button id="saveBtn">Save</button>
+      </div>
+      <div class="normalized-preview" id="normPreview"></div>
+      <div class="status" id="status"></div>
+
+      <div class="actions-row">
+        <button id="notFoundBtn">Couldn't find it — save for later</button>
+      </div>
+    `;
+
+    const input = document.getElementById("domainInput");
+    const preview = document.getElementById("normPreview");
+    const status = document.getElementById("status");
+    const saveBtn = document.getElementById("saveBtn");
+    const notFoundBtn = document.getElementById("notFoundBtn");
+
+    input.addEventListener("input", () => {
+      const norm = normalizeDomain(input.value);
+      preview.innerHTML = norm ? `will be saved as <span class="domain">${norm}</span>` : "";
+    });
+
+    input.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") saveBtn.click();
+    });
+
+    saveBtn.addEventListener("click", async () => {
+      const raw = input.value.trim();
+      const norm = normalizeDomain(raw);
+      if (!norm) {
+        status.textContent = "That doesn't look like a valid website — try again.";
+        status.className = "status error";
+        return;
+      }
+      saveBtn.disabled = true;
+      status.textContent = "Saving…";
+      status.className = "status";
+      const { error } = await supabaseClient.rpc("submit_seller_domain", {
+        p_seller_id: current.seller_id,
+        p_domain: norm,
+      });
+      if (error) {
+        status.textContent = "Error: " + error.message;
+        status.className = "status error";
+        saveBtn.disabled = false;
+        return;
+      }
+      enrichedCount++;
+      loadNext();
+    });
+
+    notFoundBtn.addEventListener("click", async () => {
+      notFoundBtn.disabled = true;
+      const { error } = await supabaseClient.rpc("mark_seller_domain_not_found", {
+        p_seller_id: current.seller_id,
+      });
+      if (error) {
+        status.textContent = "Error: " + error.message;
+        status.className = "status error";
+        notFoundBtn.disabled = false;
+        return;
+      }
+      enrichedCount++;
+      loadNext();
+    });
+
+    input.focus();
+    counter.textContent = `${enrichedCount} handled this session`;
+  }
+
+  async function loadNext() {
+    content.innerHTML = `<div class="loading-state">Loading…</div>`;
+    const { data, error } = await supabaseClient.rpc("get_next_enrichment_seller");
+    if (error) {
+      content.innerHTML = `<div class="empty-state">Error loading queue: ${error.message}</div>`;
+      return;
+    }
+    if (!data || data.length === 0) {
+      renderEmpty();
+      return;
+    }
+    renderSeller(data[0]);
+  }
+
+  loadNext();
+</script>
+</body>
+</html>
