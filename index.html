@@ -85,12 +85,20 @@
   .status.success { color: var(--green); }
   .empty-state, .loading-state { text-align: center; color: var(--muted); padding: 40px 20px; }
   .counter { color: var(--muted); font-size: 12px; }
+  .stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin-bottom: 16px; }
+  .stat { background: var(--card); border: 1px solid var(--border); border-radius: 10px; padding: 10px; text-align: center; }
+  .stat .num { font-size: 20px; font-weight: 700; }
+  .stat .lbl { font-size: 11px; color: var(--muted); margin-top: 2px; }
+  .stat.found .num { color: var(--green); }
+  .stat.pending .num { color: var(--accent); }
 </style>
 </head>
 <body>
 <div class="wrap">
   <h1>Domain Enrichment</h1>
   <p class="subtitle">ICP-qualified Keepa seller leads, one at a time. Find their website, paste it below.</p>
+
+  <div class="stats" id="stats"></div>
 
   <div id="content" class="card">
     <div class="loading-state">Loading…</div>
@@ -253,7 +261,20 @@
     counter.textContent = `${enrichedCount} handled this session`;
   }
 
+  async function loadStats() {
+    const { data, error } = await supabaseClient.rpc("get_enrichment_stats");
+    if (error || !data || !data[0]) return;
+    const d = data[0];
+    const n = (v) => Number(v).toLocaleString();
+    document.getElementById("stats").innerHTML = `
+      <div class="stat"><div class="num">${n(d.total_icp)}</div><div class="lbl">Total ICP</div></div>
+      <div class="stat found"><div class="num">${n(d.found)}</div><div class="lbl">Domain found</div></div>
+      <div class="stat"><div class="num">${n(d.not_found)}</div><div class="lbl">Not found</div></div>
+      <div class="stat pending"><div class="num">${n(d.pending)}</div><div class="lbl">Not checked</div></div>`;
+  }
+
   async function loadNext() {
+    loadStats();
     content.innerHTML = `<div class="loading-state">Loading…</div>`;
     const { data, error } = await supabaseClient.rpc("get_next_enrichment_seller");
     if (error) {
