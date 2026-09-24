@@ -146,6 +146,13 @@
     return parts.slice(-keep).join(".");
   }
 
+  // A brand's own website is never a search engine, social network, marketplace or website-builder home page.
+  const NOT_A_BRAND = ["google.com","google.co.uk","bing.com","yahoo.com","duckduckgo.com","baidu.com","gmail.com","outlook.com","hotmail.com","icloud.com","aol.com","proton.me","facebook.com","instagram.com","twitter.com","x.com","linkedin.com","tiktok.com","youtube.com","pinterest.com","reddit.com","snapchat.com","amazon.com","amzn.to","amazon.ca","amazon.co.uk","ebay.com","walmart.com","etsy.com","aliexpress.com","alibaba.com","target.com","linktr.ee","bit.ly","shopify.com","myshopify.com","wix.com","wixsite.com","squarespace.com","wordpress.com","godaddy.com","github.com","github.io","notion.so","canva.com","webflow.io"];
+  function isNotABrand(d) {
+    const builders = ["shopify.com","myshopify.com","wix.com","wixsite.com","squarespace.com","wordpress.com","godaddy.com","github.com","github.io","notion.so","canva.com","webflow.io"];
+    return NOT_A_BRAND.some((b) => d === b || (!builders.includes(b) && d.endsWith("." + b)));
+  }
+
   function normalizeDomain(raw) {
     return rootDomain(hostOf(raw));
   }
@@ -225,6 +232,11 @@
       const norm = normalizeDomain(raw);
       if (!norm) {
         status.textContent = "That doesn't look like a valid website — try again.";
+        status.className = "status error";
+        return;
+      }
+      if (isNotABrand(norm)) {
+        status.textContent = norm + " is a search engine / platform / marketplace, not the seller's own website. Paste their real site, or use \"Couldn't find it\".";
         status.className = "status error";
         return;
       }
