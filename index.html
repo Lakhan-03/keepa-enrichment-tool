@@ -115,6 +115,7 @@
   <div class="tabs">
     <button class="tab active" id="tabBtnDomains" type="button">Domains</button>
     <button class="tab" id="tabBtnEmails" type="button">Emails</button>
+    <button class="tab" id="tabBtnHealth" type="button">Health</button>
   </div>
 
   <div id="tab-domains">
@@ -128,6 +129,11 @@
   </div>
 
   <p class="counter" id="counter"></p>
+  </div>
+
+  <div id="tab-health" hidden>
+    <p class="subtitle">The worker audits itself every ~2 hours. This page refreshes automatically every 5 minutes.</p>
+    <div id="healthContent" class="card"><div class="loading-state">Loading…</div></div>
   </div>
 
   <div id="tab-emails" hidden>
@@ -353,12 +359,16 @@
   function showTab(which) {
     document.getElementById("tab-domains").hidden = which !== "domains";
     document.getElementById("tab-emails").hidden = which !== "emails";
+    document.getElementById("tab-health").hidden = which !== "health";
+    document.getElementById("tabBtnHealth").classList.toggle("active", which === "health");
+    if (which === "health") loadHealthTab();
     document.getElementById("tabBtnDomains").classList.toggle("active", which === "domains");
     document.getElementById("tabBtnEmails").classList.toggle("active", which === "emails");
     if (which === "emails" && !emailsLoaded) { emailsLoaded = true; loadNextEmail(); }
   }
   document.getElementById("tabBtnDomains").addEventListener("click", () => showTab("domains"));
   document.getElementById("tabBtnEmails").addEventListener("click", () => showTab("emails"));
+  document.getElementById("tabBtnHealth").addEventListener("click", () => showTab("health"));
 
   async function loadEmailStats() {
     const { data, error } = await supabaseClient.rpc("get_email_stats");
@@ -461,8 +471,35 @@
     else if (h.status === "ok") { bar.className = "healthbar ok"; bar.textContent = `✅ System health: all good (checked ${ago})`; }
     else { bar.className = "healthbar bad"; bar.textContent = `⚠ Needs attention (checked ${ago}): ${h.summary}`; }
   }
+  const AGO = (m) => (m < 90 ? `${m} min ago` : `${Math.round(m / 60)} h ago`);
+  const LABELS = {
+    keepa_tokens: "Keepa tokens", sweep_band: "Sweep band", bands_advanced_since_last_audit: "Bands advanced since last audit",
+    sellers_saved_last_2h: "Sellers saved (last 2 h)", outreach_queued: "Outreach queued", seller_errors: "Seller errors",
+    db_mb: "Database (MB of 500)", hunter_credits_left: "Hunter credits left",
+  };
+  async function loadHealthTab() {
+    const box = document.getElementById("healthContent");
+    const { data, error } = await supabaseClient.rpc("get_health_history", { p_limit: 24 });
+    if (error) { box.textContent = "Could not load: " + error.message; return; }
+    if (!data || !data.length) { box.textContent = "No audit yet — the first one runs ~5 minutes after the worker starts."; return; }
+    const cur = data[0];
+    const d = cur.details || {};
+    const facts = d.facts || d;
+    const finds = d.findings || [];
+    const factRows = Object.keys(LABELS).filter((k) => facts[k] !== undefined && facts[k] !== null)
+      .map((k) => `<tr><td>${esc(LABELS[k])}</td><td>${esc(typeof facts[k] === "number" ? Math.round(facts[k] * 10) / 10 : facts[k])}</td></tr>`).join("");
+    const findRows = finds.length
+      ? finds.map((f) => `<li><b>${esc(f.severity || "")}</b> ${esc(f.message || f)}</li>`).join("")
+      : "<li>No problems found.</li>";
+    const hist = data.map((h) => `<tr><td>${esc(AGO(h.minutes_ago))}</td><td>${h.status === "ok" ? "✅ all good" : "⚠ " + esc(h.summary)}</td></tr>`).join("");
+    box.innerHTML = `
+      <h3 style="margin:0 0 8px">${cur.status === "ok" ? "✅ All good" : "⚠ Needs attention"} <span style="font-weight:400;color:var(--muted);font-size:13px">— latest audit ${esc(AGO(cur.minutes_ago))}</span></h3>
+      <ul style="margin:0 0 12px;padding-left:18px">${findRows}</ul>
+      <table class="found"><tr><th>Latest numbers</th><th></th></tr>${factRows}</table>
+      <table class="found" style="margin-top:14px"><tr><th>History (latest 24 audits)</th><th></th></tr>${hist}</table>`;
+  }
   loadHealth();
-  setInterval(loadHealth, 10 * 60 * 1000);
+  setInterval(() => { loadHealth(); if (!document.getElementById("tab-health").hidden) loadHealthTab(); }, 5 * 60 * 1000);
 
   loadNext();
   loadEmailStats(); // fills the count on the Emails tab button right away
