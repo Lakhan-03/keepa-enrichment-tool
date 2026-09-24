@@ -305,6 +305,7 @@
     if (error || !data || !data[0]) return;
     const d = data[0];
     const n = (v) => Number(v).toLocaleString();
+    document.getElementById("tabBtnDomains").textContent = `Domains (${n(d.pending)})`;
     // Storage flag: the database is shared with the CRM (500 MB free-plan limit). Warn from 350 MB.
     const bar = document.getElementById("dbbar");
     if (d.db_size_mb !== null && d.db_size_mb !== undefined) {
@@ -343,6 +344,7 @@
   let emailCurrent = null;
   let emailHandled = 0;
   let emailsLoaded = false;
+  let emailNotice = ""; // shown once above the next lead
 
   function showTab(which) {
     document.getElementById("tab-domains").hidden = which !== "domains";
@@ -359,11 +361,13 @@
     if (error || !data || !data[0]) return;
     const d = data[0];
     const n = (v) => Number(v).toLocaleString();
+    document.getElementById("tabBtnEmails").textContent = `Emails (${n(d.in_queue)})`;
     document.getElementById("emailStats").innerHTML = `
       <div class="stat pending"><div class="num">${n(d.in_queue)}</div><div class="lbl">Need an email</div></div>
       <div class="stat"><div class="num">${n(d.pending_verification)}</div><div class="lbl">Verifying</div></div>
       <div class="stat found"><div class="num">${n(d.manual_ready)}</div><div class="lbl">Manual, ready</div></div>
-      <div class="stat"><div class="num">${n(d.none_found)}</div><div class="lbl">None found</div></div>`;
+      <div class="stat"><div class="num">${n(d.none_found)}</div><div class="lbl">None found</div></div>
+      <div class="dbbar" style="grid-column: 1 / -1; margin: 2px 0 0;">${n(d.no_email)} have no email at all · ${n(d.verify_failed)} found emails but none passed verification · ${n(d.manual_failed)} manual emails failed verification</div>`;
   }
 
   function renderEmpty2() {
@@ -403,7 +407,20 @@
       saveBtn.disabled = true; status.textContent = "Saving…"; status.className = "status";
       const { data, error } = await supabaseClient.rpc("submit_manual_emails", { p_company_id: emailCurrent.company_id, p_emails: emails });
       if (error) { status.textContent = error.message; status.className = "status error"; saveBtn.disabled = false; return; }
-      if (!data) { status.textContent = "Those emails were already known for this lead — nothing new was saved."; status.className = "status error"; saveBtn.disabled = false; return; }
+      const dups = (data && data.duplicates) || [];
+      const words = dups.map((d) => {
+        const ok = ["ok", "ok_for_all", "valid", "accept_all"].includes(d.verifier);
+        return d.same_lead
+          ? (ok ? `${d.email}: already verified (${d.verifier}) for this lead` : `${d.email}: already tested — NOT verified (${d.verifier})`)
+          : `${d.email}: already belongs to another lead`;
+      });
+      if (!data || !data.saved) {
+        status.textContent = "Nothing new saved. " + words.join(" · ");
+        status.className = "status error";
+        saveBtn.disabled = false;
+        return;
+      }
+      emailNotice = `Saved ${data.saved} new email(s) — verifying automatically.` + (words.length ? ` Skipped: ${words.join(" · ")}` : "");
       emailHandled++;
       loadNextEmail();
     });
@@ -425,9 +442,11 @@
     if (error) { emailContent.innerHTML = `<div class="empty-state">Error loading queue: ${esc(error.message)}</div>`; return; }
     if (!data || data.length === 0) { renderEmpty2(); return; }
     renderEmailLead(data[0]);
+    if (emailNotice) { const st = document.getElementById("emailStatus"); st.textContent = emailNotice; st.className = "status success"; emailNotice = ""; }
   }
 
   loadNext();
+  loadEmailStats(); // fills the count on the Emails tab button right away
 </script>
 </body>
 </html>
