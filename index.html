@@ -85,6 +85,8 @@
   .status.success { color: var(--green); }
   .empty-state, .loading-state { text-align: center; color: var(--muted); padding: 40px 20px; }
   .counter { color: var(--muted); font-size: 12px; }
+  .dbbar { font-size: 12px; color: var(--muted); margin-bottom: 8px; }
+  .dbbar.warn { background: #fef2f2; color: #b91c1c; border: 1px solid #fecaca; border-radius: 8px; padding: 8px 10px; font-weight: 600; }
   .stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin-bottom: 16px; }
   .stat { background: var(--card); border: 1px solid var(--border); border-radius: 10px; padding: 10px; text-align: center; }
   .stat .num { font-size: 20px; font-weight: 700; }
@@ -98,6 +100,7 @@
   <h1>Domain Enrichment</h1>
   <p class="subtitle">ICP-qualified Keepa seller leads, one at a time. Find their website, paste it below.</p>
 
+  <div class="dbbar" id="dbbar"></div>
   <div class="stats" id="stats"></div>
 
   <div id="content" class="card">
@@ -266,6 +269,15 @@
     if (error || !data || !data[0]) return;
     const d = data[0];
     const n = (v) => Number(v).toLocaleString();
+    // Storage flag: the database is shared with the CRM (500 MB free-plan limit). Warn from 350 MB.
+    const bar = document.getElementById("dbbar");
+    if (d.db_size_mb !== null && d.db_size_mb !== undefined) {
+      const mb = Number(d.db_size_mb);
+      bar.className = mb >= 350 ? "dbbar warn" : "dbbar";
+      bar.textContent = mb >= 350
+        ? `⚠ Database at ${mb} MB of 500 MB — tell Claude so we can free space`
+        : `Database: ${mb} / 500 MB`;
+    }
     document.getElementById("stats").innerHTML = `
       <div class="stat"><div class="num">${n(d.total_icp)}</div><div class="lbl">Total ICP</div></div>
       <div class="stat found"><div class="num">${n(d.found)}</div><div class="lbl">Domain found</div></div>
