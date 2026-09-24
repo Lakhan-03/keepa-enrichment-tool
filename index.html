@@ -527,6 +527,22 @@
     const { data, error } = await supabaseClient.rpc("get_health_history", { p_limit: 24 });
     if (error) { box.textContent = "Could not load: " + error.message; return; }
     if (!data || !data.length) { box.textContent = "No audit yet — the first one runs ~5 minutes after the worker starts."; return; }
+    const n = (v) => Number(v).toLocaleString();
+    let pushHtml = "";
+    try {
+      const ps = await supabaseClient.rpc("get_push_stats");
+      const x = ps.data && ps.data[0];
+      if (x) {
+        const last = x.last_push_minutes === null ? "never" : AGO(x.last_push_minutes);
+        pushHtml = `<table class="found" style="margin-bottom:14px"><tr><th>ManyReach pushes</th><th>Emails</th><th>Leads</th></tr>
+          <tr><td>Pushed in total</td><td>${n(x.pushed_emails)}</td><td>${n(x.pushed_leads)}</td></tr>
+          <tr><td>Pushed in the last 24 h</td><td>${n(x.pushed_24h)}</td><td>${n(x.pushed_leads_24h)}</td></tr>
+          <tr><td>Waiting for the next push (auto, every 2 h)</td><td>${n(x.waiting_emails)}</td><td>${n(x.waiting_leads)}</td></tr>
+          <tr><td>Catch-all emails held back (manual)</td><td>${n(x.catch_all_held)}</td><td></td></tr>
+          <tr><td>Exception groups waiting (manual)</td><td>${n(x.exception_waiting)}</td><td></td></tr>
+          <tr><td>Last push</td><td colspan="2">${esc(last)}</td></tr></table>`;
+      }
+    } catch (e) {}
     const cur = data[0];
     const d = cur.details || {};
     const facts = d.facts || d;
@@ -540,6 +556,7 @@
     box.innerHTML = `
       <h3 style="margin:0 0 8px">${cur.status === "ok" ? "✅ All good" : "⚠ Needs attention"} <span style="font-weight:400;color:var(--muted);font-size:13px">— latest audit ${esc(AGO(cur.minutes_ago))}</span></h3>
       <ul style="margin:0 0 12px;padding-left:18px">${findRows}</ul>
+      ${pushHtml}
       <table class="found"><tr><th>Latest numbers</th><th></th></tr>${factRows}</table>
       <table class="found" style="margin-top:14px"><tr><th>History (latest 24 audits)</th><th></th></tr>${hist}</table>`;
   }
