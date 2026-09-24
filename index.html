@@ -85,6 +85,9 @@
   .status.success { color: var(--green); }
   .empty-state, .loading-state { text-align: center; color: var(--muted); padding: 40px 20px; }
   .counter { color: var(--muted); font-size: 12px; }
+  .healthbar { font-size: 12px; border-radius: 8px; padding: 6px 10px; margin: 0 0 10px; background: #f3f4f6; color: var(--muted); }
+  .healthbar.ok { background: #ecfdf5; color: #166534; }
+  .healthbar.bad { background: #fef2f2; color: #b91c1c; border: 1px solid #fecaca; font-weight: 600; }
   .tabs { display: flex; gap: 8px; margin: 0 0 16px; }
   .tab { background: var(--card); border: 1px solid var(--border); color: var(--muted); padding: 8px 16px; border-radius: 999px; font-size: 14px; font-weight: 600; cursor: pointer; }
   .tab.active { background: var(--accent); border-color: var(--accent); color: #fff; }
@@ -108,6 +111,7 @@
 <body>
 <div class="wrap">
   <h1>Lead Enrichment</h1>
+  <div class="healthbar" id="healthbar">System health: checking…</div>
   <div class="tabs">
     <button class="tab active" id="tabBtnDomains" type="button">Domains</button>
     <button class="tab" id="tabBtnEmails" type="button">Emails</button>
@@ -444,6 +448,21 @@
     renderEmailLead(data[0]);
     if (emailNotice) { const st = document.getElementById("emailStatus"); st.textContent = emailNotice; st.className = "status success"; emailNotice = ""; }
   }
+
+  // System health badge: written every ~2h by the worker's audit; refreshed here every 10 minutes.
+  async function loadHealth() {
+    const bar = document.getElementById("healthbar");
+    const { data, error } = await supabaseClient.rpc("get_system_health");
+    if (error || !data || !data[0]) { bar.className = "healthbar"; bar.textContent = "System health: no audit yet"; return; }
+    const h = data[0];
+    const ago = h.minutes_ago < 90 ? `${h.minutes_ago} min ago` : `${Math.round(h.minutes_ago / 60)} h ago`;
+    const stale = h.minutes_ago > 300; // the audit runs every ~2h; older than 5h means the audit itself has stopped
+    if (stale) { bar.className = "healthbar bad"; bar.textContent = `⚠ System health: last audit was ${ago} — the audit may have stopped`; }
+    else if (h.status === "ok") { bar.className = "healthbar ok"; bar.textContent = `✅ System health: all good (checked ${ago})`; }
+    else { bar.className = "healthbar bad"; bar.textContent = `⚠ Needs attention (checked ${ago}): ${h.summary}`; }
+  }
+  loadHealth();
+  setInterval(loadHealth, 10 * 60 * 1000);
 
   loadNext();
   loadEmailStats(); // fills the count on the Emails tab button right away
