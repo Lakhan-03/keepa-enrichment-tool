@@ -49,7 +49,10 @@
   .business-name { font-size: 20px; font-weight: 700; margin: 0 0 2px; }
   .seller-name { color: var(--muted); font-size: 14px; margin: 0 0 12px; }
   .field { margin: 10px 0; font-size: 14px; }
-  .field-label { color: var(--muted); display: inline-block; min-width: 90px; }
+  /* Label sits on its own line and cannot be selected; the value is its own box, so a triple-click / drag copies ONLY the value. */
+  .field-label { color: var(--muted); display: block; font-size: 12px; margin-bottom: 2px; user-select: none; -webkit-user-select: none; }
+  .val { display: inline-block; padding: 3px 8px; margin-left: -8px; border-radius: 6px; background: #f6f7f9; border: 1px solid transparent; }
+  .val:hover { border-color: var(--border); }
   .seller-link a { color: var(--accent); text-decoration: none; }
   .seller-link a:hover { text-decoration: underline; }
   .address-line { line-height: 1.5; }
@@ -242,17 +245,18 @@
 
       <div class="field seller-link">
         <span class="field-label">Seller link</span>
-        <a href="${s.seller_link}" target="_blank" rel="noopener">${s.seller_link}</a>
+        <a class="val" href="${s.seller_link}" target="_blank" rel="noopener">${s.seller_link}</a>
       </div>
       <div class="field">
-        <span class="field-label">Business</span>${s.business_name || "n/a"}
+        <span class="field-label">Business</span><span class="val">${s.business_name || "n/a"}</span>
       </div>
       <div class="field address-line">
-        <span class="field-label">Address</span>${formatAddress(s.address)}${s.address_country ? " (" + s.address_country + ")" : ""}
+        <span class="field-label">Address</span><span class="val">${formatAddress(s.address)}${s.address_country ? " (" + s.address_country + ")" : ""}</span>
       </div>
       <div class="field">
-        <span class="field-label">Brand</span>${s.top_product_brand || "n/a"}${s.top_product_title ? " — " + s.top_product_title : ""}
+        <span class="field-label">Brand</span><span class="val">${s.top_product_brand || "n/a"}</span>
       </div>
+      ${s.top_product_title ? `<div class="field"><span class="field-label">Product</span><span class="val">${s.top_product_title}</span></div>` : ""}
 
       <div class="input-row">
         <input type="text" id="domainInput" placeholder="Paste website / domain here" autocomplete="off" />
@@ -430,9 +434,9 @@
       <div class="field"><span class="pill">${l.status === "no_email" ? "no email found" : l.status === "verify_failed" ? "found, none passed verification" : "manual email failed verification"}</span></div>
       <div class="field"><span class="field-label">Website</span><a href="https://${esc(l.domain)}" target="_blank" rel="noopener">${esc(l.domain)}</a></div>
       <div class="field seller-link"><span class="field-label">Seller link</span><a href="${esc(l.seller_link)}" target="_blank" rel="noopener">${esc(l.seller_link)}</a></div>
-      <div class="field"><span class="field-label">Brand</span>${esc(l.brand || "n/a")}</div>
-      <div class="field"><span class="field-label">Hero keyword</span>${esc(l.hero_keyword || "n/a")}</div>
-      <div class="field"><span class="field-label">Competitors</span>${esc(l.competitor_1 || "n/a")} · ${esc(l.competitor_2 || "n/a")}</div>
+      <div class="field"><span class="field-label">Brand</span><span class="val">${esc(l.brand || "n/a")}</span></div>
+      <div class="field"><span class="field-label">Hero keyword</span><span class="val">${esc(l.hero_keyword || "n/a")}</span></div>
+      <div class="field"><span class="field-label">Competitors</span><span class="val">${esc(l.competitor_1 || "n/a")}</span> · <span class="val">${esc(l.competitor_2 || "n/a")}</span></div>
       <div class="why"><strong>What happened:</strong> ${esc(l.note || "-")}</div>
       ${rows ? `<table class="found"><tr><th>Already found</th><th>Type</th><th>Verifier said</th></tr>${rows}</table>` : ""}
       <textarea id="emailInput" placeholder="Paste one or more emails — one per line, or separated by commas"></textarea>
