@@ -78,6 +78,7 @@
   #saveBtn:hover { background: var(--accent-hover); }
   #saveBtn:disabled { background: #93c5fd; cursor: not-allowed; }
   .actions-row { display: flex; justify-content: space-between; margin-top: 14px; }
+  #skipBtn, #emailSkipBtn { background: var(--bg); color: var(--gray); border: 1px solid var(--border); }
   #notFoundBtn { background: var(--bg); color: var(--gray); border: 1px solid var(--border); }
   #notFoundBtn:hover { background: #eceef1; color: var(--gray-hover); }
   .status { font-size: 13px; margin-top: 10px; min-height: 18px; }
@@ -85,6 +86,8 @@
   .status.success { color: var(--green); }
   .empty-state, .loading-state { text-align: center; color: var(--muted); padding: 40px 20px; }
   .counter { color: var(--muted); font-size: 12px; }
+  .whoami { font-size: 12px; color: var(--muted); margin: -6px 0 8px; }
+  .whoami a { color: var(--accent); cursor: pointer; text-decoration: underline; }
   .healthbar { font-size: 12px; border-radius: 8px; padding: 6px 10px; margin: 0 0 10px; background: #f3f4f6; color: var(--muted); }
   .healthbar.ok { background: #ecfdf5; color: #166534; }
   .healthbar.bad { background: #fef2f2; color: #b91c1c; border: 1px solid #fecaca; font-weight: 600; }
@@ -111,6 +114,7 @@
 <body>
 <div class="wrap">
   <h1>Lead Enrichment</h1>
+  <div class="whoami" id="whoami"></div>
   <div class="healthbar" id="healthbar">System health: checking…</div>
   <div class="tabs">
     <button class="tab active" id="tabBtnDomains" type="button">Domains</button>
@@ -195,6 +199,22 @@
   let current = null;
   let enrichedCount = 0;
 
+  // Who is working: asked once, remembered in this browser. It lets the database hand each person DIFFERENT leads (a lead is reserved for 10 minutes).
+  let worker = "";
+  try { worker = localStorage.getItem("worker_name") || ""; } catch (e) {}
+  function askName(force) {
+    if (worker && !force) return;
+    const v = (window.prompt("Your name (e.g. Lakhan or Tushar) — so you two never get the same lead:", worker) || "").trim().slice(0, 40);
+    if (v) { worker = v; try { localStorage.setItem("worker_name", v); } catch (e) {} }
+    if (!worker) worker = "anonymous-" + Math.random().toString(36).slice(2, 6);
+  }
+  function showWho() {
+    const el = document.getElementById("whoami");
+    el.innerHTML = `Working as <b>${worker.replace(/[<>&]/g, "")}</b> · <a id="changeName">change</a>`;
+    document.getElementById("changeName").onclick = () => { askName(true); showWho(); loadNext(); if (emailsLoaded) loadNextEmail(); };
+  }
+  askName(false);
+
   const content = document.getElementById("content");
   const counter = document.getElementById("counter");
 
@@ -243,6 +263,7 @@
 
       <div class="actions-row">
         <button id="notFoundBtn">Couldn't find it — save for later</button>
+        <button id="skipBtn" type="button">Skip for now</button>
       </div>
     `;
 
@@ -280,7 +301,9 @@
       const { error } = await supabaseClient.rpc("submit_seller_domain", {
         p_seller_id: current.seller_id,
         p_domain: norm,
+        p_worker: worker,
       });
+      if (error && /already_handled/.test(error.message)) { loadNext(true); return; }
       if (error) {
         status.textContent = "Error: " + error.message;
         status.className = "status error";
@@ -291,10 +314,17 @@
       loadNext();
     });
 
+    document.getElementById("skipBtn").addEventListener("click", async () => {
+      document.getElementById("skipBtn").disabled = true;
+      await supabaseClient.rpc("skip_seller_for_now", { p_seller_id: current.seller_id });
+      loadNext();
+    });
+
     notFoundBtn.addEventListener("click", async () => {
       notFoundBtn.disabled = true;
       const { error } = await supabaseClient.rpc("mark_seller_domain_not_found", {
         p_seller_id: current.seller_id,
+        p_worker: worker,
       });
       if (error) {
         status.textContent = "Error: " + error.message;
@@ -332,10 +362,10 @@
       <div class="stat pending"><div class="num">${n(d.pending)}</div><div class="lbl">Not checked</div></div>`;
   }
 
-  async function loadNext() {
+  async function loadNext(othersDidIt) {
     loadStats();
     content.innerHTML = `<div class="loading-state">Loading…</div>`;
-    const { data, error } = await supabaseClient.rpc("get_next_enrichment_seller");
+    const { data, error } = await supabaseClient.rpc("get_next_enrichment_seller", { p_worker: worker });
     if (error) {
       content.innerHTML = `<div class="empty-state">Error loading queue: ${error.message}</div>`;
       return;
@@ -345,6 +375,7 @@
       return;
     }
     renderSeller(data[0]);
+    if (othersDidIt) { const st = document.getElementById("status"); if (st) { st.textContent = "That one was just finished by someone else — here's the next one."; st.className = "status"; } }
   }
 
   // ================= Emails tab =================
@@ -407,6 +438,7 @@
       <textarea id="emailInput" placeholder="Paste one or more emails — one per line, or separated by commas"></textarea>
       <div class="status" id="emailStatus"></div>
       <div class="actions-row">
+        <button id="emailSkipBtn" type="button">Skip for now</button>
         <button id="emailNotFoundBtn">Couldn't find any — mark as not findable</button>
         <button id="emailSaveBtn" style="background: var(--accent); color: white;">Save emails</button>
       </div>`;
@@ -420,6 +452,7 @@
       if (!emails.length) { status.textContent = "Paste at least one email address."; status.className = "status error"; return; }
       saveBtn.disabled = true; status.textContent = "Saving…"; status.className = "status";
       const { data, error } = await supabaseClient.rpc("submit_manual_emails", { p_company_id: emailCurrent.company_id, p_emails: emails });
+      if (error && /not waiting for emails/.test(error.message)) { emailNotice = "That lead was just finished by someone else — here's the next one."; loadNextEmail(); return; }
       if (error) { status.textContent = error.message; status.className = "status error"; saveBtn.disabled = false; return; }
       const dups = (data && data.duplicates) || [];
       const words = dups.map((d) => {
@@ -438,6 +471,11 @@
       emailHandled++;
       loadNextEmail();
     });
+    document.getElementById("emailSkipBtn").addEventListener("click", async () => {
+      document.getElementById("emailSkipBtn").disabled = true;
+      await supabaseClient.rpc("skip_email_lead_for_now", { p_company_id: emailCurrent.company_id });
+      loadNextEmail();
+    });
     nfBtn.addEventListener("click", async () => {
       nfBtn.disabled = true;
       const { error } = await supabaseClient.rpc("mark_email_lead_not_found", { p_company_id: emailCurrent.company_id });
@@ -452,7 +490,7 @@
   async function loadNextEmail() {
     loadEmailStats();
     emailContent.innerHTML = `<div class="loading-state">Loading…</div>`;
-    const { data, error } = await supabaseClient.rpc("get_next_email_lead");
+    const { data, error } = await supabaseClient.rpc("get_next_email_lead", { p_worker: worker });
     if (error) { emailContent.innerHTML = `<div class="empty-state">Error loading queue: ${esc(error.message)}</div>`; return; }
     if (!data || data.length === 0) { renderEmpty2(); return; }
     renderEmailLead(data[0]);
@@ -501,6 +539,7 @@
   loadHealth();
   setInterval(() => { loadHealth(); if (!document.getElementById("tab-health").hidden) loadHealthTab(); }, 5 * 60 * 1000);
 
+  showWho();
   loadNext();
   loadEmailStats(); // fills the count on the Emails tab button right away
 </script>
