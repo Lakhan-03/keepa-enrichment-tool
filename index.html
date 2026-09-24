@@ -538,7 +538,7 @@
           <tr><td>Pushed in total</td><td>${n(x.pushed_emails)}</td><td>${n(x.pushed_leads)}</td></tr>
           <tr><td>Pushed in the last 24 h</td><td>${n(x.pushed_24h)}</td><td>${n(x.pushed_leads_24h)}</td></tr>
           <tr><td>Waiting for the next push (auto, every 2 h)</td><td>${n(x.waiting_emails)}</td><td>${n(x.waiting_leads)}</td></tr>
-          <tr><td>Catch-all emails held back (manual)</td><td>${n(x.catch_all_held)}</td><td></td></tr>
+          <tr><td>…of which catch-all (auto-pushed too)</td><td>${n(x.catch_all_held)}</td><td></td></tr>
           <tr><td>Exception groups waiting (manual)</td><td>${n(x.exception_waiting)}</td><td></td></tr>
           <tr><td>Last push</td><td colspan="2">${esc(last)}</td></tr></table>`;
       }
