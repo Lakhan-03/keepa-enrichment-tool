@@ -52,6 +52,9 @@
   /* Label sits on its own line and cannot be selected; the value is its own box, so a triple-click / drag copies ONLY the value. */
   .field-label { color: var(--muted); display: block; font-size: 12px; margin-bottom: 2px; user-select: none; -webkit-user-select: none; }
   .val { display: inline-block; padding: 3px 8px; margin-left: -8px; border-radius: 6px; background: #f6f7f9; border: 1px solid transparent; }
+  .copybtn { margin-left: 6px; padding: 2px 6px; font-size: 12px; line-height: 1; border: 1px solid var(--border); background: var(--card); color: var(--muted); border-radius: 6px; cursor: pointer; vertical-align: middle; user-select: none; -webkit-user-select: none; }
+  .copybtn:hover { color: var(--accent); border-color: var(--accent); }
+  .copybtn.done { color: #166534; border-color: #86efac; background: #ecfdf5; }
   .val:hover { border-color: var(--border); }
   .seller-link a { color: var(--accent); text-decoration: none; }
   .seller-link a:hover { text-decoration: underline; }
@@ -542,6 +545,30 @@
   }
   loadHealth();
   setInterval(() => { loadHealth(); if (!document.getElementById("tab-health").hidden) loadHealthTab(); }, 5 * 60 * 1000);
+
+  // Copy buttons: a small icon next to every value box copies just that text (no label). Added automatically whenever a card is drawn.
+  async function copyText(t) {
+    try { await navigator.clipboard.writeText(t); return true; } catch (e) {}
+    try { const ta = document.createElement("textarea"); ta.value = t; ta.style.position = "fixed"; ta.style.opacity = "0"; document.body.appendChild(ta); ta.select(); const ok = document.execCommand("copy"); ta.remove(); return ok; } catch (e) { return false; }
+  }
+  function addCopyButtons(root) {
+    root.querySelectorAll(".val, .business-name").forEach((el) => {
+      if (el.dataset.cp) return;
+      el.dataset.cp = "1";
+      const b = document.createElement("button");
+      b.type = "button"; b.className = "copybtn"; b.title = "Copy"; b.textContent = "⧉";
+      b.addEventListener("click", async () => {
+        const ok = await copyText(el.textContent.trim());
+        b.textContent = ok ? "✓" : "✗"; b.classList.toggle("done", ok);
+        setTimeout(() => { b.textContent = "⧉"; b.classList.remove("done"); }, 1200);
+      });
+      el.insertAdjacentElement("afterend", b);
+    });
+  }
+  ["content", "emailContent"].forEach((id) => {
+    const el = document.getElementById(id);
+    new MutationObserver(() => addCopyButtons(el)).observe(el, { childList: true, subtree: true });
+  });
 
   showWho();
   loadNext();
