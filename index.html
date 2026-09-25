@@ -84,9 +84,12 @@
   #saveBtn:hover { background: var(--accent-hover); }
   #saveBtn:disabled { background: #93c5fd; cursor: not-allowed; }
   .actions-row { display: flex; justify-content: space-between; margin-top: 14px; }
-  #skipBtn, #emailSkipBtn { background: var(--bg); color: var(--gray); border: 1px solid var(--border); }
-  #notFoundBtn { background: var(--bg); color: var(--gray); border: 1px solid var(--border); }
-  #notFoundBtn:hover { background: #eceef1; color: var(--gray-hover); }
+  #notFoundBtn { background: #fff7ed; color: #c2410c; border: 1px solid #fdba74; }
+  #notFoundBtn:hover { background: #ffedd5; color: #9a3412; }
+  #skipBtn, #emailSkipBtn { background: #eef2ff; color: #4338ca; border: 1px solid #c7d2fe; }
+  #skipBtn:hover, #emailSkipBtn:hover { background: #e0e7ff; color: #3730a3; }
+  #emailNotFoundBtn { background: #fff7ed; color: #c2410c; border: 1px solid #fdba74; }
+  #emailNotFoundBtn:hover { background: #ffedd5; color: #9a3412; }
   .status { font-size: 13px; margin-top: 10px; min-height: 18px; }
   .status.error { color: #dc2626; }
   .status.success { color: var(--green); }
@@ -113,10 +116,12 @@
   .lead-grid { display: block; }
   @media (min-width: 900px) {
     .wrap { max-width: 1180px; }
-    .lead-grid { display: grid; grid-template-columns: 1.1fr 1fr; gap: 32px; align-items: start; }
-    .lead-actions { position: sticky; top: 16px; background: #f9fafb; border: 1px solid var(--border); border-radius: 10px; padding: 16px; }
+    .lead-grid { display: grid; grid-template-columns: 1.1fr 1fr; gap: 32px; align-items: stretch; }
+    .lead-actions { display: flex; flex-direction: column; justify-content: center; background: #f9fafb; border: 1px solid var(--border); border-radius: 10px; padding: 16px; }
     .lead-actions .input-row { margin-top: 0; }
-    .lead-actions .actions-row { flex-direction: column; gap: 8px; margin-top: 12px; }
+    .lead-actions .actions-row { flex-direction: column; gap: 10px; margin-top: 8px; }
+    .lead-actions .normalized-preview, .lead-actions .status { min-height: 0; margin-top: 8px; }
+    .lead-actions .normalized-preview:empty, .lead-actions .status:empty { display: none; }
     .lead-actions .actions-row button { width: 100%; }
     .lead-actions textarea { margin-top: 0; min-height: 120px; }
     .lead-info .field { margin: 6px 0; }
