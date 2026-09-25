@@ -109,6 +109,21 @@
   .pill { display: inline-block; background: #eff6ff; color: var(--accent); border-radius: 999px; padding: 2px 10px; font-size: 12px; font-weight: 600; margin-right: 6px; }
   .dbbar { font-size: 12px; color: var(--muted); margin-bottom: 8px; }
   .dbbar.warn { background: #fef2f2; color: #b91c1c; border: 1px solid #fecaca; border-radius: 8px; padding: 8px 10px; font-weight: 600; }
+  /* Laptop layout: details on the left, the input + buttons on the right, so nothing needs scrolling. Stacks on phones. */
+  .lead-grid { display: block; }
+  @media (min-width: 900px) {
+    .wrap { max-width: 1180px; }
+    .lead-grid { display: grid; grid-template-columns: 1.1fr 1fr; gap: 32px; align-items: start; }
+    .lead-actions { position: sticky; top: 16px; background: #f9fafb; border: 1px solid var(--border); border-radius: 10px; padding: 16px; }
+    .lead-actions .input-row { margin-top: 0; }
+    .lead-actions .actions-row { flex-direction: column; gap: 8px; margin-top: 12px; }
+    .lead-actions .actions-row button { width: 100%; }
+    .lead-actions textarea { margin-top: 0; min-height: 120px; }
+    .lead-info .field { margin: 6px 0; }
+    .card { padding: 16px 20px; }
+    .subtitle { margin: 0 0 10px; }
+    .stats { margin-bottom: 10px; }
+  }
   .stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin-bottom: 16px; }
   .stat { background: var(--card); border: 1px solid var(--border); border-radius: 10px; padding: 10px; text-align: center; }
   .stat .num { font-size: 20px; font-weight: 700; }
@@ -243,6 +258,7 @@
   function renderSeller(s) {
     current = s;
     content.innerHTML = `
+      <div class="lead-grid"><div class="lead-info">
       <div class="revenue">${formatRevenue(s.estimated_monthly_revenue_min_usd)}</div>
       <div class="business-name">${s.seller_name || "(no name)"}</div>
 
@@ -261,6 +277,8 @@
       </div>
       ${s.top_product_title ? `<div class="field"><span class="field-label">Product</span><span class="val">${s.top_product_title}</span></div>` : ""}
 
+      </div>
+      <div class="lead-actions">
       <div class="input-row">
         <input type="text" id="domainInput" placeholder="Paste website / domain here" autocomplete="off" />
         <button id="saveBtn">Save</button>
@@ -272,6 +290,7 @@
         <button id="notFoundBtn">Couldn't find it — save for later</button>
         <button id="skipBtn" type="button">Skip for now</button>
       </div>
+      </div></div>
     `;
 
     const input = document.getElementById("domainInput");
@@ -432,6 +451,7 @@
     const rows = (l.contacts || []).map((c) => `<tr><td>${esc(c.email)}</td><td>${esc(c.type)}</td><td>${esc(c.verifier)}</td></tr>`).join("");
     const rev = l.revenue !== null && l.revenue !== undefined ? formatRevenue(l.revenue) : "no sales data";
     emailContent.innerHTML = `
+      <div class="lead-grid"><div class="lead-info">
       <div class="revenue">${rev}</div>
       <div class="business-name">${esc(l.company_name || l.brand || "(no name)")}</div>
       <div class="field"><span class="pill">${l.status === "no_email" ? "no email found" : l.status === "verify_failed" ? "found, none passed verification" : "manual email failed verification"}</span></div>
@@ -442,13 +462,16 @@
       <div class="field"><span class="field-label">Competitors</span><span class="val">${esc(l.competitor_1 || "n/a")}</span> · <span class="val">${esc(l.competitor_2 || "n/a")}</span></div>
       <div class="why"><strong>What happened:</strong> ${esc(l.note || "-")}</div>
       ${rows ? `<table class="found"><tr><th>Already found</th><th>Type</th><th>Verifier said</th></tr>${rows}</table>` : ""}
+      </div>
+      <div class="lead-actions">
       <textarea id="emailInput" placeholder="Paste one or more emails — one per line, or separated by commas"></textarea>
       <div class="status" id="emailStatus"></div>
       <div class="actions-row">
         <button id="emailSkipBtn" type="button">Skip for now</button>
         <button id="emailNotFoundBtn">Couldn't find any — mark as not findable</button>
         <button id="emailSaveBtn" style="background: var(--accent); color: white;">Save emails</button>
-      </div>`;
+      </div>
+      </div></div>`;
     const input = document.getElementById("emailInput");
     const status = document.getElementById("emailStatus");
     const saveBtn = document.getElementById("emailSaveBtn");
