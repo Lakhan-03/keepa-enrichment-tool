@@ -409,6 +409,7 @@
     const d = data[0];
     const n = (v) => Number(v).toLocaleString();
     document.getElementById("tabBtnDomains").textContent = `Domains (${n(d.pending)})`;
+    document.getElementById("tabBtnStats").textContent = `Stats (${n(d.found)})`; // total domains found so far
     // Storage flag: the database is shared with the CRM (500 MB free-plan limit). Warn from 350 MB.
     const bar = document.getElementById("dbbar");
     if (d.db_size_mb !== null && d.db_size_mb !== undefined) {
