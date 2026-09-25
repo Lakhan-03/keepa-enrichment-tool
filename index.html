@@ -52,6 +52,19 @@
   /* Label sits on its own line and cannot be selected; the value is its own box, so a triple-click / drag copies ONLY the value. */
   .field-label { color: var(--muted); display: block; font-size: 12px; margin-bottom: 2px; user-select: none; -webkit-user-select: none; }
   .val { display: inline-block; padding: 3px 8px; margin-left: -8px; border-radius: 6px; background: #f6f7f9; border: 1px solid transparent; }
+  .bigstats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-bottom: 16px; }
+  .bigstat { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 16px; }
+  .bigstat.hl { border-color: var(--accent); background: #eff6ff; }
+  .bigstat .num { font-size: 32px; font-weight: 700; line-height: 1.1; }
+  .bigstat .lbl { font-size: 12px; color: var(--muted); margin-top: 4px; }
+  .delta { font-size: 13px; font-weight: 700; margin-top: 6px; }
+  .delta.up { color: #16a34a; } .delta.down { color: #dc2626; } .delta.flat { color: var(--muted); }
+  table.days { width: 100%; border-collapse: collapse; font-size: 14px; background: var(--card); border: 1px solid var(--border); border-radius: 12px; overflow: hidden; }
+  table.days th, table.days td { text-align: right; padding: 9px 12px; border-bottom: 1px solid var(--border); }
+  table.days th:first-child, table.days td:first-child { text-align: left; }
+  table.days th { color: var(--muted); font-size: 12px; font-weight: 600; background: #f9fafb; }
+  table.days tr.today td { background: #eff6ff; font-weight: 600; }
+  @media (max-width: 700px) { .bigstats { grid-template-columns: repeat(2, 1fr); } table.days { font-size: 12px; } table.days th, table.days td { padding: 7px 6px; } }
   .modal-overlay { position: fixed; inset: 0; background: rgba(17, 24, 39, 0.55); display: flex; align-items: center; justify-content: center; z-index: 1000; padding: 16px; }
   .modal { background: #fff; border-radius: 14px; padding: 26px 28px; max-width: 440px; width: 100%; box-shadow: 0 20px 60px rgba(0,0,0,.35); }
   .modal h3 { margin: 0 0 10px; font-size: 20px; }
@@ -158,6 +171,7 @@
   <div class="tabs">
     <button class="tab active" id="tabBtnDomains" type="button">Domains</button>
     <button class="tab" id="tabBtnEmails" type="button">Emails</button>
+    <button class="tab" id="tabBtnStats" type="button">Stats</button>
     <button class="tab" id="tabBtnHealth" type="button">Health</button>
   </div>
 
@@ -172,6 +186,11 @@
   </div>
 
   <p class="counter" id="counter"></p>
+  </div>
+
+  <div id="tab-stats" hidden>
+    <p class="subtitle">Domains enriched per day, by person (India time). Refreshes every 2 minutes while open.</p>
+    <div id="statsContent"><div class="loading-state">Loading…</div></div>
   </div>
 
   <div id="tab-health" hidden>
@@ -434,6 +453,9 @@
   function showTab(which) {
     document.getElementById("tab-domains").hidden = which !== "domains";
     document.getElementById("tab-emails").hidden = which !== "emails";
+    document.getElementById("tab-stats").hidden = which !== "stats";
+    document.getElementById("tabBtnStats").classList.toggle("active", which === "stats");
+    if (which === "stats") loadStats2();
     document.getElementById("tab-health").hidden = which !== "health";
     document.getElementById("tabBtnHealth").classList.toggle("active", which === "health");
     if (which === "health") loadHealthTab();
@@ -444,6 +466,7 @@
   document.getElementById("tabBtnDomains").addEventListener("click", () => showTab("domains"));
   document.getElementById("tabBtnEmails").addEventListener("click", () => showTab("emails"));
   document.getElementById("tabBtnHealth").addEventListener("click", () => showTab("health"));
+  document.getElementById("tabBtnStats").addEventListener("click", () => showTab("stats"));
 
   async function loadEmailStats() {
     const { data, error } = await supabaseClient.rpc("get_email_stats");
@@ -624,6 +647,57 @@
       ov.querySelector(".modal-no").focus();
     });
   }
+
+  // ================= Stats tab =================
+  const istDay = (d) => new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Kolkata", year: "numeric", month: "2-digit", day: "2-digit" }).format(d); // YYYY-MM-DD in India time
+  function deltaHtml(cur, prev, label) {
+    if (prev === null || prev === undefined) return `<div class="delta flat">no ${label} to compare</div>`;
+    if (prev === 0) return `<div class="delta ${cur > 0 ? "up" : "flat"}">${cur > 0 ? "▲ new" : "— 0"} vs ${label} (0)</div>`;
+    const pct = Math.round(((cur - prev) / prev) * 100);
+    if (pct === 0) return `<div class="delta flat">— same as ${label} (${prev})</div>`;
+    return `<div class="delta ${pct > 0 ? "up" : "down"}">${pct > 0 ? "▲" : "▼"} ${Math.abs(pct)}% vs ${label} (${prev})</div>`;
+  }
+  async function loadStats2() {
+    const box = document.getElementById("statsContent");
+    const [dres, sres] = await Promise.all([supabaseClient.rpc("get_daily_stats", { p_days: 30 }), supabaseClient.rpc("get_enrichment_stats")]);
+    if (dres.error) { box.innerHTML = `<div class="empty-state">Could not load: ${esc(dres.error.message)}</div>`; return; }
+    const rows = dres.data || [];
+    const totals = (sres.data && sres.data[0]) || {};
+    const byDay = {};
+    const people = new Set();
+    rows.forEach((r) => {
+      const d = (byDay[r.day] = byDay[r.day] || { found: 0, notFound: 0, by: {} });
+      d.found += Number(r.found); d.notFound += Number(r.not_found);
+      d.by[r.worker] = (d.by[r.worker] || 0) + Number(r.found);
+      if (r.worker !== "earlier") people.add(r.worker);
+    });
+    const names = [...people].sort();
+    const today = istDay(new Date());
+    const days = Object.keys(byDay).sort().reverse();
+    const yKey = days.find((d) => d < today);
+    const t = byDay[today] || { found: 0, notFound: 0, by: {} };
+    const y = yKey ? byDay[yKey] : null;
+    const card = (num, lbl, extra, hl) => `<div class="bigstat ${hl ? "hl" : ""}"><div class="num">${num}</div><div class="lbl">${lbl}</div>${extra || ""}</div>`;
+    const personCards = names.map((n) => card(t.by[n] || 0, `Today — ${esc(n)}`, deltaHtml(t.by[n] || 0, y ? (y.by[n] || 0) : null, "yesterday"), false)).join("");
+    const rowsHtml = days.map((d) => {
+      const r = byDay[d];
+      const idx = days.indexOf(d);
+      const prev = days[idx + 1] ? byDay[days[idx + 1]].found : null;
+      let dl = "";
+      if (prev !== null) { const pct = prev === 0 ? null : Math.round(((r.found - prev) / prev) * 100); dl = pct === null ? "—" : pct === 0 ? `<span class="delta flat">0%</span>` : `<span class="delta ${pct > 0 ? "up" : "down"}">${pct > 0 ? "▲" : "▼"} ${Math.abs(pct)}%</span>`; }
+      const nice = new Date(d + "T00:00:00").toLocaleDateString("en-GB", { weekday: "short", day: "numeric", month: "short" });
+      return `<tr class="${d === today ? "today" : ""}"><td>${nice}${d === today ? " (today)" : ""}</td><td>${r.found}</td>${names.map((n) => `<td>${r.by[n] || 0}</td>`).join("")}<td>${r.by.earlier || 0}</td><td>${r.notFound}</td><td>${dl}</td></tr>`;
+    }).join("");
+    box.innerHTML = `
+      <div class="bigstats">
+        ${card(Number(totals.found || 0).toLocaleString(), "Domains found — overall", `<div class="delta flat">${Number(totals.pending || 0).toLocaleString()} still waiting</div>`, false)}
+        ${card(t.found, "Domains found today", deltaHtml(t.found, y ? y.found : null, "yesterday"), true)}
+        ${personCards}
+      </div>
+      <table class="days"><tr><th>Day</th><th>Found</th>${names.map((n) => `<th>${esc(n)}</th>`).join("")}<th>Earlier*</th><th>Not found</th><th>vs previous day</th></tr>${rowsHtml || `<tr><td colspan="6">No data yet</td></tr>`}</table>
+      <p class="counter" style="margin-top:10px">Found = a website was saved. Days follow India time. "So far" figures for today grow through the day. *Earlier = saved before names were tracked (before 25 Sep).</p>`;
+  }
+  setInterval(() => { if (!document.getElementById("tab-stats").hidden) loadStats2(); }, 2 * 60 * 1000);
 
   // Copy buttons: a small icon next to every value box copies just that text (no label). Added automatically whenever a card is drawn.
   async function copyText(t) {
