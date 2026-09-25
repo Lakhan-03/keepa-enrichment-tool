@@ -119,7 +119,10 @@
     .lead-grid { display: grid; grid-template-columns: 1.1fr 1fr; gap: 32px; align-items: stretch; }
     .lead-actions { display: flex; flex-direction: column; justify-content: center; background: #f9fafb; border: 1px solid var(--border); border-radius: 10px; padding: 16px; }
     .lead-actions .input-row { margin-top: 0; }
-    .lead-actions .actions-row { flex-direction: column; gap: 10px; margin-top: 8px; }
+    .lead-actions { gap: 22px; padding: 28px 24px; }
+    .lead-actions .actions-row { flex-direction: column; gap: 16px; margin-top: 0; }
+    .lead-actions .input-row { gap: 12px; }
+    .lead-actions input[type="text"], .lead-actions .actions-row button, #saveBtn { padding-top: 14px; padding-bottom: 14px; }
     .lead-actions .normalized-preview, .lead-actions .status { min-height: 0; margin-top: 8px; }
     .lead-actions .normalized-preview:empty, .lead-actions .status:empty { display: none; }
     .lead-actions .actions-row button { width: 100%; }
