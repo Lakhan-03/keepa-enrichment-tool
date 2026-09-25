@@ -52,7 +52,16 @@
   /* Label sits on its own line and cannot be selected; the value is its own box, so a triple-click / drag copies ONLY the value. */
   .field-label { color: var(--muted); display: block; font-size: 12px; margin-bottom: 2px; user-select: none; -webkit-user-select: none; }
   .val { display: inline-block; padding: 3px 8px; margin-left: -8px; border-radius: 6px; background: #f6f7f9; border: 1px solid transparent; }
-  #notFoundBtn.armed, #emailNotFoundBtn.armed { background: #dc2626; color: #fff; border-color: #dc2626; }
+  .modal-overlay { position: fixed; inset: 0; background: rgba(17, 24, 39, 0.55); display: flex; align-items: center; justify-content: center; z-index: 1000; padding: 16px; }
+  .modal { background: #fff; border-radius: 14px; padding: 26px 28px; max-width: 440px; width: 100%; box-shadow: 0 20px 60px rgba(0,0,0,.35); }
+  .modal h3 { margin: 0 0 10px; font-size: 20px; }
+  .modal p { margin: 0 0 22px; font-size: 15px; line-height: 1.5; color: #374151; }
+  .modal-actions { display: flex; gap: 12px; }
+  .modal-actions button { flex: 1; padding: 14px 16px; font-size: 15px; }
+  .modal-no { background: #eef2ff; color: #4338ca; border: 1px solid #c7d2fe; }
+  .modal-no:focus { outline: 3px solid #a5b4fc; }
+  .modal-yes { background: #dc2626; color: #fff; }
+  .modal-yes:hover { background: #b91c1c; }
   .copybtn { margin-left: 6px; padding: 2px 6px; font-size: 12px; line-height: 1; border: 1px solid var(--border); background: var(--card); color: var(--muted); border-radius: 6px; cursor: pointer; vertical-align: middle; user-select: none; -webkit-user-select: none; }
   .copybtn:hover { color: var(--accent); border-color: var(--accent); }
   .copybtn.done { color: #166534; border-color: #86efac; background: #ecfdf5; }
@@ -595,21 +604,24 @@
   loadHealth();
   setInterval(() => { loadHealth(); if (!document.getElementById("tab-health").hidden) loadHealthTab(); }, 5 * 60 * 1000);
 
-  // Two-step confirm for the "not found" buttons: the first click only arms the button ("Are you sure?"), a second click within 5 s does it.
-  // Guards against sending a lead there by accident (unlike Skip, it never comes back).
+  // Yes/No pop-up in the middle of the screen before a lead is marked "not found" (unlike Skip, it never comes back). Esc or "No" cancels; "No" is focused by default.
   function confirmClick(btn, doIt) {
-    const label = btn.textContent;
-    let armed = false, timer = null;
     btn.addEventListener("click", () => {
-      if (!armed) {
-        armed = true;
-        btn.textContent = "Are you sure? It won't come back — click again";
-        btn.classList.add("armed");
-        timer = setTimeout(() => { armed = false; btn.textContent = label; btn.classList.remove("armed"); }, 5000);
-        return;
-      }
-      clearTimeout(timer); armed = false; btn.classList.remove("armed");
-      doIt();
+      const title = (document.querySelector("#tab-domains:not([hidden]) .business-name, #tab-emails:not([hidden]) .business-name") || {}).textContent || "this lead";
+      const ov = document.createElement("div");
+      ov.className = "modal-overlay";
+      ov.innerHTML = `<div class="modal" role="dialog" aria-modal="true">
+        <h3>Mark as not found?</h3>
+        <p><b>${esc(title.trim())}</b> will be moved to "not found" and <b>won't come back</b> to this list. Use "Skip for now" if you just want to look at it later.</p>
+        <div class="modal-actions"><button type="button" class="modal-no">No, go back</button><button type="button" class="modal-yes">Yes, mark not found</button></div></div>`;
+      document.body.appendChild(ov);
+      const close = () => { ov.remove(); document.removeEventListener("keydown", onKey); };
+      const onKey = (e) => { if (e.key === "Escape") close(); };
+      document.addEventListener("keydown", onKey);
+      ov.querySelector(".modal-no").addEventListener("click", close);
+      ov.addEventListener("click", (e) => { if (e.target === ov) close(); });
+      ov.querySelector(".modal-yes").addEventListener("click", () => { close(); doIt(); });
+      ov.querySelector(".modal-no").focus();
     });
   }
 
