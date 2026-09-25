@@ -52,6 +52,7 @@
   /* Label sits on its own line and cannot be selected; the value is its own box, so a triple-click / drag copies ONLY the value. */
   .field-label { color: var(--muted); display: block; font-size: 12px; margin-bottom: 2px; user-select: none; -webkit-user-select: none; }
   .val { display: inline-block; padding: 3px 8px; margin-left: -8px; border-radius: 6px; background: #f6f7f9; border: 1px solid transparent; }
+  #notFoundBtn.armed, #emailNotFoundBtn.armed { background: #dc2626; color: #fff; border-color: #dc2626; }
   .copybtn { margin-left: 6px; padding: 2px 6px; font-size: 12px; line-height: 1; border: 1px solid var(--border); background: var(--card); color: var(--muted); border-radius: 6px; cursor: pointer; vertical-align: middle; user-select: none; -webkit-user-select: none; }
   .copybtn:hover { color: var(--accent); border-color: var(--accent); }
   .copybtn.done { color: #166534; border-color: #86efac; background: #ecfdf5; }
@@ -354,7 +355,7 @@
       loadNext();
     });
 
-    notFoundBtn.addEventListener("click", async () => {
+    confirmClick(notFoundBtn, async () => {
       notFoundBtn.disabled = true;
       const { error } = await supabaseClient.rpc("mark_seller_domain_not_found", {
         p_seller_id: current.seller_id,
@@ -514,7 +515,7 @@
       await supabaseClient.rpc("skip_email_lead_for_now", { p_company_id: emailCurrent.company_id });
       loadNextEmail();
     });
-    nfBtn.addEventListener("click", async () => {
+    confirmClick(nfBtn, async () => {
       nfBtn.disabled = true;
       const { error } = await supabaseClient.rpc("mark_email_lead_not_found", { p_company_id: emailCurrent.company_id });
       if (error) { status.textContent = error.message; status.className = "status error"; nfBtn.disabled = false; return; }
@@ -593,6 +594,24 @@
   }
   loadHealth();
   setInterval(() => { loadHealth(); if (!document.getElementById("tab-health").hidden) loadHealthTab(); }, 5 * 60 * 1000);
+
+  // Two-step confirm for the "not found" buttons: the first click only arms the button ("Are you sure?"), a second click within 5 s does it.
+  // Guards against sending a lead there by accident (unlike Skip, it never comes back).
+  function confirmClick(btn, doIt) {
+    const label = btn.textContent;
+    let armed = false, timer = null;
+    btn.addEventListener("click", () => {
+      if (!armed) {
+        armed = true;
+        btn.textContent = "Are you sure? It won't come back — click again";
+        btn.classList.add("armed");
+        timer = setTimeout(() => { armed = false; btn.textContent = label; btn.classList.remove("armed"); }, 5000);
+        return;
+      }
+      clearTimeout(timer); armed = false; btn.classList.remove("armed");
+      doIt();
+    });
+  }
 
   // Copy buttons: a small icon next to every value box copies just that text (no label). Added automatically whenever a card is drawn.
   async function copyText(t) {
