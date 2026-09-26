@@ -63,15 +63,10 @@
   table.days th, table.days td { text-align: right; padding: 9px 12px; border-bottom: 1px solid var(--border); }
   table.days th:first-child, table.days td:first-child { text-align: left; }
   table.days th { color: var(--muted); font-size: 12px; font-weight: 600; background: #f9fafb; }
-  /* one colour per column (header text + tinted cells) */
-  table.days th.c-scan { color: #475569; } table.days td.c-scan { background: #f1f5f9; color: #334155; }
-  table.days th.c-icp { color: #4338ca; } table.days td.c-icp { background: #eef2ff; color: #3730a3; font-weight: 600; }
-  table.days th.c-icppct { color: #7e22ce; } table.days td.c-icppct { background: #faf5ff; color: #6b21a8; font-weight: 600; }
-  table.days th.c-dompct { color: #0f766e; } table.days td.c-dompct { background: #f0fdfa; color: #0f766e; font-weight: 600; }
-  table.days th.c-found { color: #15803d; } table.days td.c-found { background: #f0fdf4; color: #166534; font-weight: 700; }
-  table.days th.c-p0 { color: #1d4ed8; } table.days td.c-p0 { background: #eff6ff; color: #1e40af; }
-  table.days th.c-p1 { color: #c2410c; } table.days td.c-p1 { background: #fff7ed; color: #9a3412; }
-  table.days th.c-nf { color: #b91c1c; } table.days td.c-nf { background: #fef2f2; color: #991b1b; }
+  /* two column groups: Sweep (Scanned..Domain %) in soft blue, Domain work (Found..Not found) in soft green */
+  table.days td.g1 { background: #f1f6ff; } table.days th.g1 { background: #e3edff; color: #1e3a8a; }
+  table.days td.g2 { background: #f0faf4; } table.days th.g2 { background: #dff3e7; color: #14532d; }
+  table.days th.gs, table.days td.gs { border-left: 2px solid var(--border); }
   table.days tr.today td { background: #eff6ff; font-weight: 600; }
   @media (max-width: 700px) { .bigstats { grid-template-columns: repeat(2, 1fr); } table.days { font-size: 12px; } table.days th, table.days td { padding: 7px 6px; } }
   .modal-overlay { position: fixed; inset: 0; background: rgba(17, 24, 39, 0.55); display: flex; align-items: center; justify-content: center; z-index: 1000; padding: 16px; }
@@ -702,11 +697,11 @@
       const idx = days.indexOf(d);
       const prev = days[idx + 1] ? byDay[days[idx + 1]].found : null;
       let dl = "";
-      if (prev !== null) { const pct = prev === 0 ? null : Math.round(((r.found - prev) / prev) * 100); dl = pct === null ? "—" : pct === 0 ? `<span class="delta flat">0%</span>` : `<span class="delta ${pct > 0 ? "up" : "down"}">${pct > 0 ? "▲" : "▼"} ${Math.abs(pct)}%</span>`; }
+      if (prev !== null) { const pct = prev < 20 ? null : Math.round(((r.found - prev) / prev) * 100); dl = pct === null ? "—" : pct === 0 ? `<span class="delta flat">0%</span>` : `<span class="delta ${pct > 0 ? "up" : "down"}">${pct > 0 ? "▲" : "▼"} ${Math.abs(pct)}%</span>`; }
       const nice = new Date(d + "T00:00:00").toLocaleDateString("en-GB", { weekday: "short", day: "numeric", month: "short" });
       const ic = icpDay[d];
       const domPct = r.found + r.notFound ? Math.round((100 * r.found) / (r.found + r.notFound)) + "%" : "-";
-      return `<tr class="${d === today ? "today" : ""}"><td>${nice}${d === today ? " (today)" : ""}</td><td class="c-scan">${ic ? ic.sellers : "-"}</td><td class="c-icp">${ic ? ic.icp : "-"}</td><td class="c-icppct">${ic && ic.sellers ? Math.round((100 * ic.icp) / ic.sellers) + "%" : "-"}</td><td class="c-dompct">${domPct}</td><td class="c-found">${r.found}</td>${names.map((n, i) => `<td class="c-p${i % 2}">${r.by[n] || 0}</td>`).join("")}<td class="c-nf">${r.notFound}</td><td>${dl}</td></tr>`;
+      return `<tr class="${d === today ? "today" : ""}"><td>${nice}${d === today ? " (today)" : ""}</td><td class="g1 gs">${ic ? ic.sellers : "-"}</td><td class="g1">${ic ? ic.icp : "-"}</td><td class="g1">${ic && ic.sellers ? Math.round((100 * ic.icp) / ic.sellers) + "%" : "-"}</td><td class="g1">${domPct}</td><td class="g2 gs">${r.found}</td>${names.map((n, i) => `<td class="g2">${r.by[n] || 0}</td>`).join("")}<td class="g2">${r.notFound}</td><td>${dl}</td></tr>`;
     }).join("");
     box.innerHTML = `
       <div class="bigstats">
@@ -714,7 +709,7 @@
         ${card(t.found, "Domains found today", deltaHtml(t.found, y ? y.found : null, "yesterday"), true)}
         ${personCards}
       </div>
-      <table class="days"><tr><th>Day</th><th class="c-scan">Scanned</th><th class="c-icp">ICP</th><th class="c-icppct">ICP %</th><th class="c-dompct">Domain %</th><th class="c-found">Found</th>${names.map((n, i) => `<th class="c-p${i % 2}">${esc(n)}</th>`).join("")}<th class="c-nf">Not found</th><th>vs previous day</th></tr>${rowsHtml || `<tr><td colspan="10">No data yet</td></tr>`}</table>
+      <table class="days"><tr><th>Day</th><th class="g1 gs">Scanned</th><th class="g1">ICP</th><th class="g1">ICP %</th><th class="g1">Domain %</th><th class="g2 gs">Found</th>${names.map((n, i) => `<th class="g2">${esc(n)}</th>`).join("")}<th class="g2">Not found</th><th>vs previous day</th></tr>${rowsHtml || `<tr><td colspan="10">No data yet</td></tr>`}</table>
       <p class="counter" style="margin-top:10px">Scanned = sellers the sweep looked at; ICP = those that fit; Domain % = found ÷ (found + not found) that day. Found = a website was saved. Days follow India time. "So far" figures for today grow through the day. Entries saved before names were tracked (before 25 Sep) are counted under Tushar.</p>`;
   }
   setInterval(() => { if (!document.getElementById("tab-stats").hidden) loadStats2(); }, 2 * 60 * 1000);
