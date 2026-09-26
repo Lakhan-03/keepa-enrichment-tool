@@ -660,7 +660,7 @@
   }
   async function loadStats2() {
     const box = document.getElementById("statsContent");
-    const [dres, sres] = await Promise.all([supabaseClient.rpc("get_daily_stats", { p_days: 30 }), supabaseClient.rpc("get_enrichment_stats")]);
+    const [dres, sres, ires, wres] = await Promise.all([supabaseClient.rpc("get_daily_stats", { p_days: 30 }), supabaseClient.rpc("get_enrichment_stats"), supabaseClient.rpc("get_daily_icp", { p_days: 30 }), supabaseClient.rpc("get_sweep_status")]);
     if (dres.error) { box.innerHTML = `<div class="empty-state">Could not load: ${esc(dres.error.message)}</div>`; return; }
     const rows = dres.data || [];
     const totals = (sres.data && sres.data[0]) || {};
@@ -672,9 +672,17 @@
       d.by[r.worker] = (d.by[r.worker] || 0) + Number(r.found);
       people.add(r.worker);
     });
+    // ICP intake per day (sellers the sweep scanned, and how many were ICP)
+    const icpDay = {};
+    (ires.data || []).forEach((r) => { icpDay[r.day] = { sellers: Number(r.sellers), icp: Number(r.icp) }; if (!byDay[r.day]) byDay[r.day] = { found: 0, notFound: 0, by: {} }; });
     const names = [...people].sort();
     const today = istDay(new Date());
     const days = Object.keys(byDay).sort().reverse();
+    const sweepBand = wres.data && wres.data[0] ? wres.data[0].band : null;
+    const ti = icpDay[today] || { sellers: 0, icp: 0 };
+    const yDay = days.find((d) => d < today);
+    const yi = yDay ? (icpDay[yDay] || { sellers: 0, icp: 0 }) : null;
+    const totalIcp = Number(totals.total_icp || 0), foundAll = Number(totals.found || 0);
     const yKey = days.find((d) => d < today);
     const t = byDay[today] || { found: 0, notFound: 0, by: {} };
     const y = yKey ? byDay[yKey] : null;
@@ -687,15 +695,21 @@
       let dl = "";
       if (prev !== null) { const pct = prev === 0 ? null : Math.round(((r.found - prev) / prev) * 100); dl = pct === null ? "—" : pct === 0 ? `<span class="delta flat">0%</span>` : `<span class="delta ${pct > 0 ? "up" : "down"}">${pct > 0 ? "▲" : "▼"} ${Math.abs(pct)}%</span>`; }
       const nice = new Date(d + "T00:00:00").toLocaleDateString("en-GB", { weekday: "short", day: "numeric", month: "short" });
-      return `<tr class="${d === today ? "today" : ""}"><td>${nice}${d === today ? " (today)" : ""}</td><td>${r.found}</td>${names.map((n) => `<td>${r.by[n] || 0}</td>`).join("")}<td>${r.notFound}</td><td>${dl}</td></tr>`;
+      return `<tr class="${d === today ? "today" : ""}"><td>${nice}${d === today ? " (today)" : ""}</td><td>${(icpDay[d] || {}).icp ?? "-"}</td><td>${(icpDay[d] || {}).sellers ?? "-"}</td><td>${icpDay[d] && icpDay[d].sellers ? Math.round((100 * icpDay[d].icp) / icpDay[d].sellers) + "%" : "-"}</td><td>${r.found}</td>${names.map((n) => `<td>${r.by[n] || 0}</td>`).join("")}<td>${r.notFound}</td><td>${dl}</td></tr>`;
     }).join("");
     box.innerHTML = `
+      <div class="bigstats">
+        ${card(ti.icp, "New ICP leads today", deltaHtml(ti.icp, yi ? yi.icp : null, "yesterday"), true)}
+        ${card(ti.sellers, "Sellers scanned today", `<div class="delta flat">${ti.sellers ? Math.round((100 * ti.icp) / ti.sellers) : 0}% became ICP</div>`, false)}
+        ${card(sweepBand === null ? "-" : "Band " + sweepBand, "Sweep is working on", "", false)}
+        ${card(totalIcp ? Math.round((100 * foundAll) / totalIcp) + "%" : "-", "Domain coverage (found / all ICP)", `<div class="delta flat">${foundAll.toLocaleString()} of ${totalIcp.toLocaleString()} ICP</div>`, false)}
+      </div>
       <div class="bigstats">
         ${card(Number(totals.found || 0).toLocaleString(), "Domains found — overall", `<div class="delta flat">${Number(totals.pending || 0).toLocaleString()} still waiting</div>`, false)}
         ${card(t.found, "Domains found today", deltaHtml(t.found, y ? y.found : null, "yesterday"), true)}
         ${personCards}
       </div>
-      <table class="days"><tr><th>Day</th><th>Found</th>${names.map((n) => `<th>${esc(n)}</th>`).join("")}<th>Not found</th><th>vs previous day</th></tr>${rowsHtml || `<tr><td colspan="6">No data yet</td></tr>`}</table>
+      <table class="days"><tr><th>Day</th><th>New ICP</th><th>Scanned</th><th>ICP %</th><th>Found</th>${names.map((n) => `<th>${esc(n)}</th>`).join("")}<th>Not found</th><th>vs previous day</th></tr>${rowsHtml || `<tr><td colspan="6">No data yet</td></tr>`}</table>
       <p class="counter" style="margin-top:10px">Found = a website was saved. Days follow India time. "So far" figures for today grow through the day. Entries saved before names were tracked (before 25 Sep) are counted under Tushar.</p>`;
   }
   setInterval(() => { if (!document.getElementById("tab-stats").hidden) loadStats2(); }, 2 * 60 * 1000);
