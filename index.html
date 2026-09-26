@@ -269,6 +269,8 @@
   let enrichedCount = 0;
   let domainMode = "queue"; // 'queue' = normal list, 'skipped' = the Skip-for-now bucket (only shown when picked in the dropdown)
   let emailMode = "queue";
+  let skippedSeen = []; // domain leads already looked at in this visit to the Skipped bucket ("Next skipped lead" moves on without removing them)
+  let emailSkippedSeen = [];
 
   // Who is working: asked once, remembered in this browser. It lets the database hand each person DIFFERENT leads (a lead is reserved for 10 minutes).
   let worker = "";
@@ -302,9 +304,13 @@
 
   function renderEmpty() {
     content.innerHTML = domainMode === "skipped"
-      ? `<div class="empty-state">No skipped leads right now.</div>`
+      ? (skippedSeen.length
+          ? `<div class="empty-state">That was the last skipped lead. They all stay in the bucket.<br><br><button id="restartSkipped" type="button" style="background:#eef2ff;color:#4338ca;border:1px solid #c7d2fe">Start from the first again</button></div>`
+          : `<div class="empty-state">No skipped leads right now.</div>`)
       : `<div class="empty-state">Queue is empty — every ICP-qualified seller has a domain result already. Nothing left to enrich right now.</div>`;
     counter.textContent = "";
+    const rs = document.getElementById("restartSkipped");
+    if (rs) rs.addEventListener("click", () => { skippedSeen = []; loadNext(); });
   }
 
   function renderSeller(s) {
@@ -340,7 +346,7 @@
       <div class="status" id="status"></div>
 
       <div class="actions-row">
-        <button id="skipBtn" type="button">${domainMode === "skipped" ? "Put back in the queue" : "Skip for now"}</button>
+        <button id="skipBtn" type="button">${domainMode === "skipped" ? "Next skipped lead" : "Skip for now"}</button>
         <button id="notFoundBtn">Couldn't find it — save for later</button>
       </div>
       </div></div>
@@ -395,7 +401,7 @@
 
     document.getElementById("skipBtn").addEventListener("click", async () => {
       document.getElementById("skipBtn").disabled = true;
-      if (domainMode === "skipped") await supabaseClient.rpc("unskip_seller", { p_seller_id: current.seller_id });
+      if (domainMode === "skipped") { skippedSeen.push(current.seller_id); await supabaseClient.rpc("release_seller", { p_seller_id: current.seller_id }); } // stays in the bucket
       else await supabaseClient.rpc("skip_seller_for_now", { p_seller_id: current.seller_id, p_worker: worker });
       loadNext();
     });
@@ -449,7 +455,7 @@
   async function loadNext(othersDidIt) {
     loadStats();
     content.innerHTML = `<div class="loading-state">Loading…</div>`;
-    const { data, error } = await supabaseClient.rpc("get_next_enrichment_seller", { p_worker: worker, p_mode: domainMode });
+    const { data, error } = await supabaseClient.rpc("get_next_enrichment_seller", { p_worker: worker, p_mode: domainMode, p_exclude: domainMode === "skipped" && skippedSeen.length ? skippedSeen : null });
     if (error) {
       content.innerHTML = `<div class="empty-state">Error loading queue: ${error.message}</div>`;
       return;
@@ -507,9 +513,13 @@
 
   function renderEmpty2() {
     emailContent.innerHTML = emailMode === "skipped"
-      ? `<div class="empty-state">No skipped leads right now.</div>`
+      ? (emailSkippedSeen.length
+          ? `<div class="empty-state">That was the last skipped lead. They all stay in the bucket.<br><br><button id="restartSkippedE" type="button" style="background:#eef2ff;color:#4338ca;border:1px solid #c7d2fe">Start from the first again</button></div>`
+          : `<div class="empty-state">No skipped leads right now.</div>`)
       : `<div class="empty-state">Nothing left here — every lead that needed an email has one, or was marked as not findable.</div>`;
     emailCounter.textContent = "";
+    const rs = document.getElementById("restartSkippedE");
+    if (rs) rs.addEventListener("click", () => { emailSkippedSeen = []; loadNextEmail(); });
   }
 
   function renderEmailLead(l) {
@@ -533,7 +543,7 @@
       <textarea id="emailInput" placeholder="Paste one or more emails — one per line, or separated by commas"></textarea>
       <div class="status" id="emailStatus"></div>
       <div class="actions-row">
-        <button id="emailSkipBtn" type="button">${emailMode === "skipped" ? "Put back in the queue" : "Skip for now"}</button>
+        <button id="emailSkipBtn" type="button">${emailMode === "skipped" ? "Next skipped lead" : "Skip for now"}</button>
         <button id="emailNotFoundBtn">Couldn't find any — mark as not findable</button>
         <button id="emailSaveBtn" style="background: var(--accent); color: white;">Save emails</button>
       </div>
@@ -569,7 +579,7 @@
     });
     document.getElementById("emailSkipBtn").addEventListener("click", async () => {
       document.getElementById("emailSkipBtn").disabled = true;
-      if (emailMode === "skipped") await supabaseClient.rpc("unskip_email_lead", { p_company_id: emailCurrent.company_id });
+      if (emailMode === "skipped") { emailSkippedSeen.push(emailCurrent.company_id); await supabaseClient.rpc("release_email_lead", { p_company_id: emailCurrent.company_id }); }
       else await supabaseClient.rpc("skip_email_lead_for_now", { p_company_id: emailCurrent.company_id, p_worker: worker });
       loadNextEmail();
     });
@@ -587,7 +597,7 @@
   async function loadNextEmail() {
     loadEmailStats();
     emailContent.innerHTML = `<div class="loading-state">Loading…</div>`;
-    const { data, error } = await supabaseClient.rpc("get_next_email_lead", { p_worker: worker, p_mode: emailMode });
+    const { data, error } = await supabaseClient.rpc("get_next_email_lead", { p_worker: worker, p_mode: emailMode, p_exclude: emailMode === "skipped" && emailSkippedSeen.length ? emailSkippedSeen : null });
     if (error) { emailContent.innerHTML = `<div class="empty-state">Error loading queue: ${esc(error.message)}</div>`; return; }
     if (!data || data.length === 0) { renderEmpty2(); return; }
     renderEmailLead(data[0]);
@@ -761,8 +771,8 @@
     new MutationObserver(() => addCopyButtons(el)).observe(el, { childList: true, subtree: true });
   });
 
-  document.getElementById("domainMode").addEventListener("change", (e) => { domainMode = e.target.value; loadNext(); });
-  document.getElementById("emailMode").addEventListener("change", (e) => { emailMode = e.target.value; loadNextEmail(); });
+  document.getElementById("domainMode").addEventListener("change", (e) => { domainMode = e.target.value; skippedSeen = []; loadNext(); });
+  document.getElementById("emailMode").addEventListener("change", (e) => { emailMode = e.target.value; emailSkippedSeen = []; loadNextEmail(); });
   showWho();
   loadNext();
   loadEmailStats(); // fills the count on the Emails tab button right away
