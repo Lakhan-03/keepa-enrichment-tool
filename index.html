@@ -161,7 +161,10 @@
     .subtitle { margin: 0 0 10px; }
     .stats { margin-bottom: 10px; }
   }
-  .stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin-bottom: 16px; }
+  .modebar { display: flex; align-items: center; gap: 8px; margin: 0 0 12px; font-size: 13px; color: var(--muted); }
+  .modebar select { padding: 7px 10px; border: 1px solid var(--border); border-radius: 8px; font-size: 14px; background: var(--card); color: var(--text); font-weight: 600; }
+  .pill.skippill { background: #fef3c7; color: #92400e; }
+  .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(110px, 1fr)); gap: 8px; margin-bottom: 16px; }
   .stat { background: var(--card); border: 1px solid var(--border); border-radius: 10px; padding: 10px; text-align: center; }
   .stat .num { font-size: 20px; font-weight: 700; }
   .stat .lbl { font-size: 11px; color: var(--muted); margin-top: 2px; }
@@ -184,6 +187,7 @@
   <div id="tab-domains">
   <p class="subtitle">ICP-qualified Keepa seller leads, one at a time. Find their website, paste it below.</p>
 
+  <div class="modebar">Showing <select id="domainMode"><option value="queue">Main queue</option><option value="skipped">Skipped for now</option></select></div>
   <div class="dbbar" id="dbbar"></div>
   <div class="stats" id="stats"></div>
 
@@ -206,6 +210,7 @@
 
   <div id="tab-emails" hidden>
     <p class="subtitle">Leads where email finding failed. Search for an email yourself (website, LinkedIn, contact page) and paste it. Every email is verified automatically before it can be pushed.</p>
+    <div class="modebar">Showing <select id="emailMode"><option value="queue">Main queue</option><option value="skipped">Skipped for now</option></select></div>
     <div class="stats" id="emailStats"></div>
     <div id="emailContent" class="card"><div class="loading-state">Loading…</div></div>
     <p class="counter" id="emailCounter"></p>
@@ -262,6 +267,8 @@
   // ---- App state ----
   let current = null;
   let enrichedCount = 0;
+  let domainMode = "queue"; // 'queue' = normal list, 'skipped' = the Skip-for-now bucket (only shown when picked in the dropdown)
+  let emailMode = "queue";
 
   // Who is working: asked once, remembered in this browser. It lets the database hand each person DIFFERENT leads (a lead is reserved for 10 minutes).
   let worker = "";
@@ -294,7 +301,9 @@
   }
 
   function renderEmpty() {
-    content.innerHTML = `<div class="empty-state">Queue is empty — every ICP-qualified seller has a domain result already. Nothing left to enrich right now.</div>`;
+    content.innerHTML = domainMode === "skipped"
+      ? `<div class="empty-state">No skipped leads right now.</div>`
+      : `<div class="empty-state">Queue is empty — every ICP-qualified seller has a domain result already. Nothing left to enrich right now.</div>`;
     counter.textContent = "";
   }
 
@@ -302,6 +311,7 @@
     current = s;
     content.innerHTML = `
       <div class="lead-grid"><div class="lead-info">
+      ${domainMode === "skipped" ? '<div><span class="pill skippill">Skipped lead</span></div>' : ""}
       <div class="revenue">${formatRevenue(s.estimated_monthly_revenue_min_usd)}</div>
       <div class="business-name">${s.seller_name || "(no name)"}</div>
 
@@ -330,7 +340,7 @@
       <div class="status" id="status"></div>
 
       <div class="actions-row">
-        <button id="skipBtn" type="button">Skip for now</button>
+        <button id="skipBtn" type="button">${domainMode === "skipped" ? "Put back in the queue" : "Skip for now"}</button>
         <button id="notFoundBtn">Couldn't find it — save for later</button>
       </div>
       </div></div>
@@ -385,7 +395,8 @@
 
     document.getElementById("skipBtn").addEventListener("click", async () => {
       document.getElementById("skipBtn").disabled = true;
-      await supabaseClient.rpc("skip_seller_for_now", { p_seller_id: current.seller_id });
+      if (domainMode === "skipped") await supabaseClient.rpc("unskip_seller", { p_seller_id: current.seller_id });
+      else await supabaseClient.rpc("skip_seller_for_now", { p_seller_id: current.seller_id, p_worker: worker });
       loadNext();
     });
 
@@ -415,6 +426,8 @@
     const d = data[0];
     const n = (v) => Number(v).toLocaleString();
     document.getElementById("tabBtnDomains").textContent = `Domains (${n(d.pending)})`;
+    document.querySelector("#domainMode option[value=queue]").textContent = `Main queue (${n(d.pending)})`;
+    document.querySelector("#domainMode option[value=skipped]").textContent = `Skipped for now (${n(d.skipped || 0)})`;
     document.getElementById("tabBtnStats").textContent = `Stats (${n(d.found)})`; // total domains found so far
     // Storage flag: the database is shared with the CRM (500 MB free-plan limit). Warn from 350 MB.
     const bar = document.getElementById("dbbar");
@@ -429,13 +442,14 @@
       <div class="stat"><div class="num">${n(d.total_icp)}</div><div class="lbl">Total ICP</div></div>
       <div class="stat found"><div class="num">${n(d.found)}</div><div class="lbl">Domain found</div></div>
       <div class="stat"><div class="num">${n(d.not_found)}</div><div class="lbl">Not found</div></div>
-      <div class="stat pending"><div class="num">${n(d.pending)}</div><div class="lbl">Not checked</div></div>`;
+      <div class="stat pending"><div class="num">${n(d.pending)}</div><div class="lbl">Not checked</div></div>
+      <div class="stat"><div class="num" style="color:#b45309">${n(d.skipped || 0)}</div><div class="lbl">Skipped for now</div></div>`;
   }
 
   async function loadNext(othersDidIt) {
     loadStats();
     content.innerHTML = `<div class="loading-state">Loading…</div>`;
-    const { data, error } = await supabaseClient.rpc("get_next_enrichment_seller", { p_worker: worker });
+    const { data, error } = await supabaseClient.rpc("get_next_enrichment_seller", { p_worker: worker, p_mode: domainMode });
     if (error) {
       content.innerHTML = `<div class="empty-state">Error loading queue: ${error.message}</div>`;
       return;
@@ -481,6 +495,8 @@
     const d = data[0];
     const n = (v) => Number(v).toLocaleString();
     document.getElementById("tabBtnEmails").textContent = `Emails (${n(d.in_queue)})`;
+    document.querySelector("#emailMode option[value=queue]").textContent = `Main queue (${n(d.in_queue)})`;
+    document.querySelector("#emailMode option[value=skipped]").textContent = `Skipped for now (${n(d.skipped || 0)})`;
     document.getElementById("emailStats").innerHTML = `
       <div class="stat pending"><div class="num">${n(d.in_queue)}</div><div class="lbl">Need an email</div></div>
       <div class="stat"><div class="num">${n(d.pending_verification)}</div><div class="lbl">Verifying</div></div>
@@ -490,7 +506,9 @@
   }
 
   function renderEmpty2() {
-    emailContent.innerHTML = `<div class="empty-state">Nothing left here — every lead that needed an email has one, or was marked as not findable.</div>`;
+    emailContent.innerHTML = emailMode === "skipped"
+      ? `<div class="empty-state">No skipped leads right now.</div>`
+      : `<div class="empty-state">Nothing left here — every lead that needed an email has one, or was marked as not findable.</div>`;
     emailCounter.textContent = "";
   }
 
@@ -515,7 +533,7 @@
       <textarea id="emailInput" placeholder="Paste one or more emails — one per line, or separated by commas"></textarea>
       <div class="status" id="emailStatus"></div>
       <div class="actions-row">
-        <button id="emailSkipBtn" type="button">Skip for now</button>
+        <button id="emailSkipBtn" type="button">${emailMode === "skipped" ? "Put back in the queue" : "Skip for now"}</button>
         <button id="emailNotFoundBtn">Couldn't find any — mark as not findable</button>
         <button id="emailSaveBtn" style="background: var(--accent); color: white;">Save emails</button>
       </div>
@@ -551,7 +569,8 @@
     });
     document.getElementById("emailSkipBtn").addEventListener("click", async () => {
       document.getElementById("emailSkipBtn").disabled = true;
-      await supabaseClient.rpc("skip_email_lead_for_now", { p_company_id: emailCurrent.company_id });
+      if (emailMode === "skipped") await supabaseClient.rpc("unskip_email_lead", { p_company_id: emailCurrent.company_id });
+      else await supabaseClient.rpc("skip_email_lead_for_now", { p_company_id: emailCurrent.company_id, p_worker: worker });
       loadNextEmail();
     });
     confirmClick(nfBtn, async () => {
@@ -568,7 +587,7 @@
   async function loadNextEmail() {
     loadEmailStats();
     emailContent.innerHTML = `<div class="loading-state">Loading…</div>`;
-    const { data, error } = await supabaseClient.rpc("get_next_email_lead", { p_worker: worker });
+    const { data, error } = await supabaseClient.rpc("get_next_email_lead", { p_worker: worker, p_mode: emailMode });
     if (error) { emailContent.innerHTML = `<div class="empty-state">Error loading queue: ${esc(error.message)}</div>`; return; }
     if (!data || data.length === 0) { renderEmpty2(); return; }
     renderEmailLead(data[0]);
@@ -666,7 +685,7 @@
   }
   async function loadStats2() {
     const box = document.getElementById("statsContent");
-    const [dres, sres, ires, wres] = await Promise.all([supabaseClient.rpc("get_daily_stats", { p_days: 30 }), supabaseClient.rpc("get_enrichment_stats"), supabaseClient.rpc("get_daily_icp", { p_days: 30 }), supabaseClient.rpc("get_sweep_status")]);
+    const [dres, sres, ires, wres, kres] = await Promise.all([supabaseClient.rpc("get_daily_stats", { p_days: 30 }), supabaseClient.rpc("get_enrichment_stats"), supabaseClient.rpc("get_daily_icp", { p_days: 30 }), supabaseClient.rpc("get_sweep_status"), supabaseClient.rpc("get_daily_skips", { p_days: 30 })]);
     if (dres.error) { box.innerHTML = `<div class="empty-state">Could not load: ${esc(dres.error.message)}</div>`; return; }
     const rows = dres.data || [];
     const totals = (sres.data && sres.data[0]) || {};
@@ -681,6 +700,8 @@
     // ICP intake per day (sellers the sweep scanned, and how many were ICP)
     const icpDay = {};
     (ires.data || []).forEach((r) => { icpDay[r.day] = { sellers: Number(r.sellers), icp: Number(r.icp) }; if (!byDay[r.day]) byDay[r.day] = { found: 0, notFound: 0, by: {} }; });
+    const skipDay = {};
+    (kres.data || []).forEach((r) => { skipDay[r.day] = (skipDay[r.day] || 0) + Number(r.skipped); if (!byDay[r.day]) byDay[r.day] = { found: 0, notFound: 0, by: {} }; });
     const names = [...people].sort();
     const today = istDay(new Date());
     const days = Object.keys(byDay).sort().reverse();
@@ -703,16 +724,16 @@
       const nice = new Date(d + "T00:00:00").toLocaleDateString("en-GB", { weekday: "short", day: "numeric", month: "short" });
       const ic = icpDay[d];
       const domPct = r.found + r.notFound ? Math.round((100 * r.found) / (r.found + r.notFound)) + "%" : "-";
-      return `<tr class="${d === today ? "today" : ""}"><td>${nice}${d === today ? " (today)" : ""}</td><td class="g1 gs">${ic ? ic.sellers : "-"}</td><td class="g1">${ic ? ic.icp : "-"}</td><td class="g1">${ic && ic.sellers ? Math.round((100 * ic.icp) / ic.sellers) + "%" : "-"}</td><td class="g1">${domPct}</td><td class="g2 gs">${r.found}</td>${names.map((n, i) => `<td class="g2">${r.by[n] || 0}</td>`).join("")}<td class="g2">${r.notFound}</td><td>${dl}</td></tr>`;
+      return `<tr class="${d === today ? "today" : ""}"><td>${nice}${d === today ? " (today)" : ""}</td><td class="g1 gs">${ic ? ic.sellers : "-"}</td><td class="g1">${ic ? ic.icp : "-"}</td><td class="g1">${ic && ic.sellers ? Math.round((100 * ic.icp) / ic.sellers) + "%" : "-"}</td><td class="g1">${domPct}</td><td class="g2 gs">${r.found}</td>${names.map((n, i) => `<td class="g2">${r.by[n] || 0}</td>`).join("")}<td class="g2">${r.notFound}</td><td class="g2">${skipDay[d] || 0}</td><td>${dl}</td></tr>`;
     }).join("");
     box.innerHTML = `
       <div class="bigstats">
-        ${card(Number(totals.found || 0).toLocaleString(), "Domains found — overall", `<div class="delta flat">${Number(totals.pending || 0).toLocaleString()} still waiting</div>`, false)}
+        ${card(Number(totals.found || 0).toLocaleString(), "Domains found — overall", `<div class="delta flat">${Number(totals.pending || 0).toLocaleString()} waiting · ${Number(totals.skipped || 0).toLocaleString()} skipped</div>`, false)}
         ${card(t.found, "Domains found today", deltaHtml(t.found, y ? y.found : null, "yesterday"), true)}
         ${personCards}
       </div>
-      <table class="days"><tr><th>Day</th><th class="g1 gs">Scanned</th><th class="g1">ICP</th><th class="g1">ICP %</th><th class="g1">Domain %</th><th class="g2 gs">Found</th>${names.map((n, i) => `<th class="g2">${esc(n)}</th>`).join("")}<th class="g2">Not found</th><th>vs previous day</th></tr>${rowsHtml || `<tr><td colspan="10">No data yet</td></tr>`}</table>
-      <p class="counter" style="margin-top:10px">Scanned = sellers the sweep looked at; ICP = those that fit; Domain % = found ÷ (found + not found) that day. Found = a website was saved. Days follow India time. "So far" figures for today grow through the day. Entries saved before names were tracked (before 25 Sep) are counted under Tushar.</p>`;
+      <table class="days"><tr><th>Day</th><th class="g1 gs">Scanned</th><th class="g1">ICP</th><th class="g1">ICP %</th><th class="g1">Domain %</th><th class="g2 gs">Found</th>${names.map((n, i) => `<th class="g2">${esc(n)}</th>`).join("")}<th class="g2">Not found</th><th class="g2">Skipped</th><th>vs previous day</th></tr>${rowsHtml || `<tr><td colspan="11">No data yet</td></tr>`}</table>
+      <p class="counter" style="margin-top:10px">Scanned = sellers the sweep looked at; ICP = those that fit; Domain % = found ÷ (found + not found) that day. Found = a website was saved. Skipped = leads put in the Skip-for-now bucket that day (they stay there until you pick them from the dropdown). Days follow India time. "So far" figures for today grow through the day. Entries saved before names were tracked (before 25 Sep) are counted under Tushar.</p>`;
   }
   setInterval(() => { if (!document.getElementById("tab-stats").hidden) loadStats2(); }, 2 * 60 * 1000);
 
@@ -740,6 +761,8 @@
     new MutationObserver(() => addCopyButtons(el)).observe(el, { childList: true, subtree: true });
   });
 
+  document.getElementById("domainMode").addEventListener("change", (e) => { domainMode = e.target.value; loadNext(); });
+  document.getElementById("emailMode").addEventListener("change", (e) => { emailMode = e.target.value; loadNextEmail(); });
   showWho();
   loadNext();
   loadEmailStats(); // fills the count on the Emails tab button right away
