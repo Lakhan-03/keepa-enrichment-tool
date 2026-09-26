@@ -67,7 +67,9 @@
   table.days td.g1 { background: #f1f6ff; } table.days th.g1 { background: #e3edff; color: #1e3a8a; }
   table.days td.g2 { background: #f0faf4; } table.days th.g2 { background: #dff3e7; color: #14532d; }
   table.days th.gs, table.days td.gs { border-left: 2px solid var(--border); }
-  table.days tr.today td { background: #eff6ff; font-weight: 600; }
+  /* today keeps the same two colour groups as every other day; it is only bold, with an accent bar on the left */
+  table.days tr.today td { font-weight: 700; }
+  table.days tr.today td:first-child { box-shadow: inset 4px 0 0 var(--accent); }
   @media (max-width: 700px) { .bigstats { grid-template-columns: repeat(2, 1fr); } table.days { font-size: 12px; } table.days th, table.days td { padding: 7px 6px; } }
   .modal-overlay { position: fixed; inset: 0; background: rgba(17, 24, 39, 0.55); display: flex; align-items: center; justify-content: center; z-index: 1000; padding: 16px; }
   .modal { background: #fff; border-radius: 14px; padding: 26px 28px; max-width: 440px; width: 100%; box-shadow: 0 20px 60px rgba(0,0,0,.35); }
