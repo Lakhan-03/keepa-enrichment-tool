@@ -620,7 +620,7 @@
   const LABELS = {
     keepa_tokens: "Keepa tokens", sweep_band: "Sweep band", bands_advanced_since_last_audit: "Bands advanced since last audit",
     sellers_saved_last_2h: "Sellers saved (last 2 h)", outreach_queued: "Outreach queued", seller_errors: "Seller errors",
-    db_mb: "Database (MB of 500)", hunter_credits_left: "Hunter credits left",
+    db_mb: "Database (MB of 500)", hunter_credits_left: "Hunter credits left", email_finding: "Email finding",
   };
   async function loadHealthTab() {
     const box = document.getElementById("healthContent");
@@ -648,7 +648,7 @@
     const facts = d.facts || d;
     const finds = d.findings || [];
     const factRows = Object.keys(LABELS).filter((k) => facts[k] !== undefined && facts[k] !== null)
-      .map((k) => `<tr><td>${esc(LABELS[k])}</td><td>${esc(typeof facts[k] === "number" ? Math.round(facts[k] * 10) / 10 : facts[k])}</td></tr>`).join("");
+      .map((k) => `<tr><td>${esc(LABELS[k])}</td><td${k === "email_finding" && String(facts[k]).startsWith("paused") ? ' style="color:#b45309;font-weight:600"' : ""}>${esc(typeof facts[k] === "number" ? Math.round(facts[k] * 10) / 10 : facts[k])}</td></tr>`).join("");
     const findRows = finds.length
       ? finds.map((f) => `<li>${f.level === "critical" ? "❗ " : "⚠ "}${esc(f.text)}</li>`).join("")
       : "<li>No problems found.</li>";
