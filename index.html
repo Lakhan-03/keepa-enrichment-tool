@@ -325,6 +325,7 @@
         <span class="field-label">Seller link</span>
         <a class="val" href="${s.seller_link}" target="_blank" rel="noopener">${s.seller_link}</a>
       </div>
+      ${searchNameFor(s) ? `<div class="field"><span class="field-label">Find domain</span><a href="https://www.google.com/search?q=${encodeURIComponent(searchNameFor(s))}" target="_blank" rel="noopener">Google: "${esc(searchNameFor(s))}"</a></div>` : ""}
       <div class="field">
         <span class="field-label">Business</span><span class="val">${s.business_name || "n/a"}</span>
       </div>
@@ -470,6 +471,16 @@
 
   // ================= Emails tab =================
   const esc = (t) => String(t ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+  // Same generic-brand list as worker/competitors.ts's NOT_A_BRAND — a placeholder value like "Generic" or
+  // "Unbranded" makes a Google search useless, so skip it and fall back to seller name, then business name.
+  const NOT_A_BRAND = new Set(["generic", "unbranded", "unknown", "na", "none", "nobrand", "amazonbasics"]);
+  const searchNameFor = (s) => {
+    const brand = (s.top_product_brand || s.brand || "").trim();
+    if (brand && !NOT_A_BRAND.has(brand.toLowerCase().replace(/[^a-z0-9]/g, ""))) return brand;
+    const seller = (s.seller_name || "").trim();
+    if (seller) return seller;
+    return (s.business_name || s.company_name || "").trim();
+  };
   const emailContent = document.getElementById("emailContent");
   const emailCounter = document.getElementById("emailCounter");
   let emailCurrent = null;
