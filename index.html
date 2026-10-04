@@ -532,6 +532,7 @@
       <div class="business-name">${esc(l.company_name || l.brand || "(no name)")}</div>
       <div class="field"><span class="pill">${l.status === "no_email" ? "no email found" : l.status === "verify_failed" ? "found, none passed verification" : "manual email failed verification"}</span></div>
       <div class="field"><span class="field-label">Website</span><a href="https://${esc(l.domain)}" target="_blank" rel="noopener">${esc(l.domain)}</a></div>
+      <div class="field"><span class="field-label">Find founder email</span><a href="https://www.google.com/search?q=${encodeURIComponent(l.domain + " founder email")}" target="_blank" rel="noopener">Google: "${esc(l.domain)} founder email"</a></div>
       <div class="field seller-link"><span class="field-label">Seller link</span><a href="${esc(l.seller_link)}" target="_blank" rel="noopener">${esc(l.seller_link)}</a></div>
       <div class="field"><span class="field-label">Brand</span><span class="val">${esc(l.brand || "n/a")}</span></div>
       <div class="field"><span class="field-label">Hero keyword</span><span class="val">${esc(l.hero_keyword || "n/a")}</span></div>
