@@ -548,6 +548,7 @@
     document.querySelector("#amzDomainMode option[value=queue]").textContent = `Main queue (${n(d.pending)})`;
     document.querySelector("#amzDomainMode option[value=skipped]").textContent = `Skipped for now (${n(d.skipped || 0)})`;
     document.getElementById("amzStats").innerHTML = `
+      <div class="stat"><div class="num" style="color:var(--muted)">${n(d.total_processed || 0)}</div><div class="lbl">Sellers checked (total)</div></div>
       <div class="stat"><div class="num">${n(d.total_icp)}</div><div class="lbl">Total ICP</div></div>
       <div class="stat found"><div class="num">${n(d.found)}</div><div class="lbl">Domain found</div></div>
       <div class="stat"><div class="num">${n(d.not_found)}</div><div class="lbl">Not found</div></div>
