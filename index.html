@@ -180,6 +180,7 @@
   <div class="tabs">
     <button class="tab active" id="tabBtnDomains" type="button">Domains</button>
     <button class="tab" id="tabBtnEmails" type="button">Emails</button>
+    <button class="tab" id="tabBtnAmzbees" type="button">Amazon Bees</button>
     <button class="tab" id="tabBtnStats" type="button">Stats</button>
     <button class="tab" id="tabBtnHealth" type="button">Health</button>
   </div>
@@ -206,6 +207,19 @@
   <div id="tab-health" hidden>
     <p class="subtitle">The worker audits itself every ~2 hours. This page refreshes automatically every 5 minutes.</p>
     <div id="healthContent" class="card"><div class="loading-state">Loading…</div></div>
+  </div>
+
+  <div id="tab-amzbees" hidden>
+  <p class="subtitle">Amazon Bees — seller data only, separate from the general queue above. Find their website, paste it below.</p>
+
+  <div class="modebar">Showing <select id="amzDomainMode"><option value="queue">Main queue</option><option value="skipped">Skipped for now</option></select></div>
+  <div class="stats" id="amzStats"></div>
+
+  <div id="amzContent" class="card">
+    <div class="loading-state">Loading…</div>
+  </div>
+
+  <p class="counter" id="amzCounter"></p>
   </div>
 
   <div id="tab-emails" hidden>
@@ -493,6 +507,7 @@
   function showTab(which) {
     document.getElementById("tab-domains").hidden = which !== "domains";
     document.getElementById("tab-emails").hidden = which !== "emails";
+    document.getElementById("tab-amzbees").hidden = which !== "amzbees";
     document.getElementById("tab-stats").hidden = which !== "stats";
     document.getElementById("tabBtnStats").classList.toggle("active", which === "stats");
     if (which === "stats") loadStats2();
@@ -501,12 +516,162 @@
     if (which === "health") loadHealthTab();
     document.getElementById("tabBtnDomains").classList.toggle("active", which === "domains");
     document.getElementById("tabBtnEmails").classList.toggle("active", which === "emails");
+    document.getElementById("tabBtnAmzbees").classList.toggle("active", which === "amzbees");
     if (which === "emails" && !emailsLoaded) { emailsLoaded = true; loadNextEmail(); }
+    if (which === "amzbees" && !amzLoaded) { amzLoaded = true; loadNextAmz(); }
   }
   document.getElementById("tabBtnDomains").addEventListener("click", () => showTab("domains"));
   document.getElementById("tabBtnEmails").addEventListener("click", () => showTab("emails"));
+  document.getElementById("tabBtnAmzbees").addEventListener("click", () => showTab("amzbees"));
   document.getElementById("tabBtnHealth").addEventListener("click", () => showTab("health"));
   document.getElementById("tabBtnStats").addEventListener("click", () => showTab("stats"));
+
+  // ================= Amazon Bees tab =================
+  // Fully self-contained (own state, own DOM ids, own functions) — reuses only pure shared
+  // helpers (formatAddress, formatRevenue, normalizeDomain, isNotABrand, confirmClick, worker
+  // name) so nothing here can affect the general Domains tab above. Same RPCs, just with
+  // p_client_tag: 'amzbees' passed through — see schema.sql's 2026-10-08 Amazon Bees section.
+  let amzCurrent = null;
+  let amzEnrichedCount = 0;
+  let amzDomainMode = "queue";
+  let amzSkippedSeen = [];
+  let amzLoaded = false;
+  const amzContent = document.getElementById("amzContent");
+  const amzCounter = document.getElementById("amzCounter");
+
+  async function loadAmzStats() {
+    const { data, error } = await supabaseClient.rpc("get_enrichment_stats", { p_client_tag: "amzbees" });
+    if (error || !data || !data[0]) return;
+    const d = data[0];
+    const n = (v) => Number(v).toLocaleString();
+    document.getElementById("tabBtnAmzbees").textContent = `Amazon Bees (${n(d.pending)})`;
+    document.querySelector("#amzDomainMode option[value=queue]").textContent = `Main queue (${n(d.pending)})`;
+    document.querySelector("#amzDomainMode option[value=skipped]").textContent = `Skipped for now (${n(d.skipped || 0)})`;
+    document.getElementById("amzStats").innerHTML = `
+      <div class="stat"><div class="num">${n(d.total_icp)}</div><div class="lbl">Total ICP</div></div>
+      <div class="stat found"><div class="num">${n(d.found)}</div><div class="lbl">Domain found</div></div>
+      <div class="stat"><div class="num">${n(d.not_found)}</div><div class="lbl">Not found</div></div>
+      <div class="stat pending"><div class="num">${n(d.pending)}</div><div class="lbl">Not checked</div></div>
+      <div class="stat"><div class="num" style="color:#b45309">${n(d.skipped || 0)}</div><div class="lbl">Skipped for now</div></div>`;
+  }
+
+  function renderAmzEmpty() {
+    amzContent.innerHTML = amzDomainMode === "skipped"
+      ? (amzSkippedSeen.length
+          ? `<div class="empty-state">That was the last skipped lead. They all stay in the bucket.<br><br><button id="amzRestartSkipped" type="button" style="background:#eef2ff;color:#4338ca;border:1px solid #c7d2fe">Start from the first again</button></div>`
+          : `<div class="empty-state">No skipped leads right now.</div>`)
+      : `<div class="empty-state">Queue is empty — every Amazon Bees ICP-qualified seller has a domain result already.</div>`;
+    amzCounter.textContent = "";
+    const rs = document.getElementById("amzRestartSkipped");
+    if (rs) rs.addEventListener("click", () => { amzSkippedSeen = []; loadNextAmz(); });
+  }
+
+  function renderAmzSeller(s) {
+    amzCurrent = s;
+    amzContent.innerHTML = `
+      <div class="lead-grid"><div class="lead-info">
+      ${amzDomainMode === "skipped" ? '<div><span class="pill skippill">Skipped lead</span></div>' : ""}
+      <div class="revenue">${formatRevenue(s.estimated_monthly_revenue_min_usd)}</div>
+      <div class="business-name">${s.seller_name || "(no name)"}</div>
+
+      <div class="field seller-link">
+        <span class="field-label">Seller link</span>
+        <a class="val" href="${s.seller_link}" target="_blank" rel="noopener">${s.seller_link}</a>
+      </div>
+      ${searchNameFor(s) ? `<div class="field"><span class="field-label">Find domain</span><a href="https://www.google.com/search?q=${encodeURIComponent(searchNameFor(s))}" target="_blank" rel="noopener">Google: "${esc(searchNameFor(s))}"</a></div>` : ""}
+      <div class="field">
+        <span class="field-label">Business</span><span class="val">${s.business_name || "n/a"}</span>
+      </div>
+      <div class="field address-line">
+        <span class="field-label">Address</span><span class="val">${formatAddress(s.address)}${s.address_country ? " (" + s.address_country + ")" : ""}</span>
+      </div>
+      <div class="field">
+        <span class="field-label">Brand</span><span class="val">${s.top_product_brand || "n/a"}</span>
+      </div>
+      ${s.top_product_title ? `<div class="field"><span class="field-label">Product</span><span class="val">${s.top_product_title}</span></div>` : ""}
+
+      </div>
+      <div class="lead-actions">
+      <div class="input-row">
+        <input type="text" id="amzDomainInput" placeholder="Paste website / domain here" autocomplete="off" />
+        <button id="amzSaveBtn">Save</button>
+      </div>
+      <div class="normalized-preview" id="amzNormPreview"></div>
+      <div class="status" id="amzStatus"></div>
+
+      <div class="actions-row">
+        <button id="amzSkipBtn" type="button">${amzDomainMode === "skipped" ? "Next skipped lead" : "Skip for now"}</button>
+        <button id="amzNotFoundBtn">Couldn't find it — save for later</button>
+      </div>
+      </div></div>
+    `;
+
+    const input = document.getElementById("amzDomainInput");
+    const preview = document.getElementById("amzNormPreview");
+    const status = document.getElementById("amzStatus");
+    const saveBtn = document.getElementById("amzSaveBtn");
+    const notFoundBtn = document.getElementById("amzNotFoundBtn");
+
+    input.addEventListener("input", () => {
+      const norm = normalizeDomain(input.value);
+      preview.innerHTML = norm ? `will be saved as <span class="domain">${norm}</span>` : "";
+    });
+    input.addEventListener("keydown", (e) => { if (e.key === "Enter") saveBtn.click(); });
+
+    saveBtn.addEventListener("click", async () => {
+      const raw = input.value.trim();
+      const norm = normalizeDomain(raw);
+      if (!norm) { status.textContent = "That doesn't look like a valid website — try again."; status.className = "status error"; return; }
+      if (isNotABrand(norm)) {
+        status.textContent = norm + " is a search engine / platform / marketplace, not the seller's own website. Paste their real site, or use \"Couldn't find it\".";
+        status.className = "status error";
+        return;
+      }
+      saveBtn.disabled = true;
+      status.textContent = "Saving…";
+      status.className = "status";
+      const { error } = await supabaseClient.rpc("submit_seller_domain", { p_seller_id: amzCurrent.seller_id, p_domain: norm, p_worker: worker });
+      if (error && /already_handled/.test(error.message)) { loadNextAmz(true); return; }
+      if (error) { status.textContent = "Error: " + error.message; status.className = "status error"; saveBtn.disabled = false; return; }
+      amzEnrichedCount++;
+      loadNextAmz();
+    });
+
+    document.getElementById("amzSkipBtn").addEventListener("click", async () => {
+      document.getElementById("amzSkipBtn").disabled = true;
+      if (amzDomainMode === "skipped") { amzSkippedSeen.push(amzCurrent.seller_id); await supabaseClient.rpc("release_seller", { p_seller_id: amzCurrent.seller_id }); }
+      else await supabaseClient.rpc("skip_seller_for_now", { p_seller_id: amzCurrent.seller_id, p_worker: worker });
+      loadNextAmz();
+    });
+
+    confirmClick(notFoundBtn, async () => {
+      notFoundBtn.disabled = true;
+      const { error } = await supabaseClient.rpc("mark_seller_domain_not_found", { p_seller_id: amzCurrent.seller_id, p_worker: worker });
+      if (error) { status.textContent = "Error: " + error.message; status.className = "status error"; notFoundBtn.disabled = false; return; }
+      amzEnrichedCount++;
+      loadNextAmz();
+    });
+
+    input.focus();
+    amzCounter.textContent = `${amzEnrichedCount} handled this session`;
+  }
+
+  async function loadNextAmz(othersDidIt) {
+    loadAmzStats();
+    amzContent.innerHTML = `<div class="loading-state">Loading…</div>`;
+    const { data, error } = await supabaseClient.rpc("get_next_enrichment_seller", {
+      p_worker: worker, p_mode: amzDomainMode,
+      p_exclude: amzDomainMode === "skipped" && amzSkippedSeen.length ? amzSkippedSeen : null,
+      p_client_tag: "amzbees",
+    });
+    if (error) { amzContent.innerHTML = `<div class="empty-state">Error loading queue: ${error.message}</div>`; return; }
+    if (!data || data.length === 0) { renderAmzEmpty(); return; }
+    renderAmzSeller(data[0]);
+    if (othersDidIt) { const st = document.getElementById("amzStatus"); if (st) { st.textContent = "That one was just finished by someone else — here's the next one."; st.className = "status"; } }
+  }
+
+  document.getElementById("amzDomainMode").addEventListener("change", (e) => { amzDomainMode = e.target.value; amzSkippedSeen = []; loadNextAmz(); });
+  loadAmzStats(); // fills the count on the Amazon Bees tab button right away
 
   async function loadEmailStats() {
     const { data, error } = await supabaseClient.rpc("get_email_stats");
@@ -781,7 +946,7 @@
       el.insertAdjacentElement("afterend", b);
     });
   }
-  ["content", "emailContent"].forEach((id) => {
+  ["content", "emailContent", "amzContent"].forEach((id) => {
     const el = document.getElementById(id);
     new MutationObserver(() => addCopyButtons(el)).observe(el, { childList: true, subtree: true });
   });
