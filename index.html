@@ -170,6 +170,9 @@
   .stat .lbl { font-size: 11px; color: var(--muted); margin-top: 2px; }
   .stat.found .num { color: var(--green); }
   .stat.pending .num { color: var(--accent); }
+  .bulk-grid { display: block; }
+  .bulk-grid textarea { min-height: 260px; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 13px; margin-top: 4px; }
+  @media (min-width: 700px) { .bulk-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; } }
 </style>
 </head>
 <body>
@@ -180,6 +183,7 @@
   <div class="tabs">
     <button class="tab active" id="tabBtnDomains" type="button">Domains</button>
     <button class="tab" id="tabBtnEmails" type="button">Emails</button>
+    <button class="tab" id="tabBtnBulkEmails" type="button">Bulk Emails</button>
     <button class="tab" id="tabBtnAmzbees" type="button">Amazon Bees</button>
     <button class="tab" id="tabBtnStats" type="button">Stats</button>
     <button class="tab" id="tabBtnHealth" type="button">Health</button>
@@ -228,6 +232,13 @@
     <div class="stats" id="emailStats"></div>
     <div id="emailContent" class="card"><div class="loading-state">Loading…</div></div>
     <p class="counter" id="emailCounter"></p>
+  </div>
+
+  <div id="tab-bulkemails" hidden>
+    <p class="subtitle">Work the no-email queue in batches of 10. Copy the domains on the left, search for emails yourself, then paste results on the right in the SAME order — one line per domain, leave a line blank if you can't find anything.</p>
+    <div class="stats" id="bulkStats"></div>
+    <div id="bulkCard" class="card"><div class="loading-state">Loading…</div></div>
+    <p class="counter" id="bulkCounter"></p>
   </div>
 </div>
 
@@ -507,6 +518,7 @@
   function showTab(which) {
     document.getElementById("tab-domains").hidden = which !== "domains";
     document.getElementById("tab-emails").hidden = which !== "emails";
+    document.getElementById("tab-bulkemails").hidden = which !== "bulkemails";
     document.getElementById("tab-amzbees").hidden = which !== "amzbees";
     document.getElementById("tab-stats").hidden = which !== "stats";
     document.getElementById("tabBtnStats").classList.toggle("active", which === "stats");
@@ -516,12 +528,15 @@
     if (which === "health") loadHealthTab();
     document.getElementById("tabBtnDomains").classList.toggle("active", which === "domains");
     document.getElementById("tabBtnEmails").classList.toggle("active", which === "emails");
+    document.getElementById("tabBtnBulkEmails").classList.toggle("active", which === "bulkemails");
     document.getElementById("tabBtnAmzbees").classList.toggle("active", which === "amzbees");
     if (which === "emails" && !emailsLoaded) { emailsLoaded = true; loadNextEmail(); }
+    if (which === "bulkemails" && !bulkLoaded) { bulkLoaded = true; loadBulkBatch(); }
     if (which === "amzbees" && !amzLoaded) { amzLoaded = true; loadNextAmz(); }
   }
   document.getElementById("tabBtnDomains").addEventListener("click", () => showTab("domains"));
   document.getElementById("tabBtnEmails").addEventListener("click", () => showTab("emails"));
+  document.getElementById("tabBtnBulkEmails").addEventListener("click", () => showTab("bulkemails"));
   document.getElementById("tabBtnAmzbees").addEventListener("click", () => showTab("amzbees"));
   document.getElementById("tabBtnHealth").addEventListener("click", () => showTab("health"));
   document.getElementById("tabBtnStats").addEventListener("click", () => showTab("stats"));
@@ -785,6 +800,93 @@
     if (emailNotice) { const st = document.getElementById("emailStatus"); st.textContent = emailNotice; st.className = "status success"; emailNotice = ""; }
   }
 
+  // ================= Bulk Emails tab =================
+  // Same no_email queue as the Emails tab above, but hands out up to 10 at once (get_next_email_leads_batch)
+  // instead of one at a time, so you can copy all 10 domains out, search for emails yourself across tabs, and
+  // paste everything back in one pass — matched strictly by LINE POSITION (line 1 = domain 1, etc.), never by
+  // guessing which email belongs to which domain. A blank line leaves that domain exactly as it was (no_email) —
+  // it is NOT marked "not found" (that's a separate, one-way action on the Emails tab), so it just comes back
+  // in a later batch. User decision 2026-10-08: blanks always just wait, never auto-marked.
+  let bulkRows = []; // [{company_id, company_name, domain}], in the order shown/pasted
+  let bulkLoaded = false;
+  const bulkCard = document.getElementById("bulkCard");
+
+  async function loadBulkStats() {
+    const { data, error } = await supabaseClient.rpc("get_email_stats");
+    if (error || !data || !data[0]) return;
+    const d = data[0];
+    const n = (v) => Number(v).toLocaleString();
+    document.getElementById("tabBtnBulkEmails").textContent = `Bulk Emails (${n(d.queue_no_email)})`;
+    document.getElementById("bulkStats").innerHTML = `
+      <div class="stat pending"><div class="num">${n(d.queue_no_email)}</div><div class="lbl">No email — in queue</div></div>
+      <div class="stat"><div class="num">${n(d.pending_verification)}</div><div class="lbl">Verifying</div></div>
+      <div class="stat found"><div class="num">${n(d.manual_ready)}</div><div class="lbl">Manual, ready</div></div>`;
+  }
+
+  function renderBulkBatch() {
+    if (!bulkRows.length) {
+      bulkCard.innerHTML = `<div class="empty-state">No domains waiting for an email right now.</div>`;
+      document.getElementById("bulkCounter").textContent = "";
+      return;
+    }
+    bulkCard.innerHTML = `
+      <div class="bulk-grid">
+        <div>
+          <span class="field-label">Domains (${bulkRows.length}) — copy these</span>
+          <textarea id="bulkDomainsBox" readonly>${esc(bulkRows.map((r) => r.domain).join("\n"))}</textarea>
+        </div>
+        <div>
+          <span class="field-label">Paste results here — same order top to bottom, blank line = couldn't find it</span>
+          <textarea id="bulkPasteBox" placeholder="Line 1 = email(s) for domain 1, line 2 for domain 2, and so on. Multiple emails on one line: separate with a comma. Leave a line empty to skip that domain for now."></textarea>
+        </div>
+      </div>
+      <div class="status" id="bulkStatus"></div>
+      <div class="actions-row">
+        <button id="bulkSubmitBtn" style="background:var(--accent);color:#fff;">Submit batch &amp; load next 10</button>
+      </div>
+      <div id="bulkResults"></div>`;
+    document.getElementById("bulkSubmitBtn").addEventListener("click", submitBulkBatch);
+    document.getElementById("bulkCounter").textContent = `${bulkRows.length} domains loaded`;
+    const box = document.getElementById("bulkDomainsBox");
+    box.focus(); box.select();
+  }
+
+  async function loadBulkBatch() {
+    loadBulkStats();
+    bulkCard.innerHTML = `<div class="loading-state">Loading…</div>`;
+    const { data, error } = await supabaseClient.rpc("get_next_email_leads_batch", { p_worker: worker, p_count: 10 });
+    if (error) { bulkCard.innerHTML = `<div class="empty-state">Error loading batch: ${esc(error.message)}</div>`; return; }
+    bulkRows = data || [];
+    renderBulkBatch();
+  }
+
+  async function submitBulkBatch() {
+    const btn = document.getElementById("bulkSubmitBtn");
+    const status = document.getElementById("bulkStatus");
+    btn.disabled = true;
+    status.textContent = "Saving…";
+    status.className = "status";
+    const pasted = document.getElementById("bulkPasteBox").value.split("\n");
+    const toRelease = [];
+    const lines = [];
+    for (let i = 0; i < bulkRows.length; i++) {
+      const row = bulkRows[i];
+      const raw = (pasted[i] || "").trim();
+      if (!raw) { toRelease.push(row.company_id); lines.push({ domain: row.domain, msg: "left as-is (no_email)" }); continue; }
+      const emails = [...new Set(raw.split(/[\s,;]+/).map((e) => e.trim().toLowerCase()).filter((e) => e.includes("@")))];
+      if (!emails.length) { toRelease.push(row.company_id); lines.push({ domain: row.domain, msg: "no valid email in that line — left as-is" }); continue; }
+      const { data, error } = await supabaseClient.rpc("submit_manual_emails", { p_company_id: row.company_id, p_emails: emails });
+      if (error) { toRelease.push(row.company_id); lines.push({ domain: row.domain, msg: "ERROR: " + error.message }); continue; }
+      const dups = (data && data.duplicates) || [];
+      lines.push({ domain: row.domain, msg: `saved ${data.saved} email(s)${dups.length ? ` (${dups.length} already seen before, skipped)` : ""}` });
+    }
+    if (toRelease.length) await supabaseClient.rpc("release_email_leads_batch", { p_company_ids: toRelease });
+    document.getElementById("bulkResults").innerHTML = `<table class="found"><tr><th>Domain</th><th>Result</th></tr>${lines.map((l) => `<tr><td>${esc(l.domain)}</td><td>${esc(l.msg)}</td></tr>`).join("")}</table>`;
+    status.textContent = "Batch done — loading next 10…";
+    status.className = "status success";
+    setTimeout(loadBulkBatch, 1200);
+  }
+
   // System health badge: written every ~2h by the worker's audit; refreshed here every 10 minutes.
   async function loadHealth() {
     const bar = document.getElementById("healthbar");
@@ -957,6 +1059,7 @@
   showWho();
   loadNext();
   loadEmailStats(); // fills the count on the Emails tab button right away
+  loadBulkStats(); // fills the count on the Bulk Emails tab button right away
 </script>
 </body>
 </html>
