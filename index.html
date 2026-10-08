@@ -359,6 +359,11 @@
       <div class="field address-line">
         <span class="field-label">Address</span><span class="val">${formatAddress(s.address)}${s.address_country ? " (" + s.address_country + ")" : ""}</span>
       </div>
+      ${(s.vat_id || s.trade_number) ? `<div class="field">
+        <span class="field-label">VAT / Trade number</span>
+        <span class="val">${esc([s.vat_id, s.trade_number].filter(Boolean).join(" · "))}</span>
+        ${s.trade_number ? `<a href="https://find-and-update.company-information.service.gov.uk/search?q=${encodeURIComponent(s.trade_number)}" target="_blank" rel="noopener" style="margin-left:8px;">Companies House search</a>` : ""}
+      </div>` : ""}
       <div class="field">
         <span class="field-label">Brand</span><span class="val">${s.top_product_brand || "n/a"}</span>
       </div>
