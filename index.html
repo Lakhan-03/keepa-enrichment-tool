@@ -235,7 +235,8 @@
   </div>
 
   <div id="tab-bulkemails" hidden>
-    <p class="subtitle">Work the no-email queue in batches of 10. Copy the domains on the left, search for emails yourself, then paste results on the right in the SAME order — one line per domain, leave a line blank if you can't find anything.</p>
+    <p class="subtitle">Work the no-email queue in batches of 10. Copy the domains on the left, search for emails yourself (or paste them into ChatGPT/another AI tool using the prompt below), then paste results on the right using the same numbers — leave a number blank if you can't find anything.</p>
+    <button id="bulkPromptBtn" type="button" style="background:#eef2ff;color:#4338ca;border:1px solid #c7d2fe;margin-bottom:12px;">📋 ChatGPT prompt</button>
     <div class="modebar">Showing <select id="bulkMode"><option value="queue">Main queue</option><option value="skipped">Skipped for now</option></select></div>
     <div class="stats" id="bulkStats"></div>
     <div id="bulkCard" class="card"><div class="loading-state">Loading…</div></div>
@@ -817,6 +818,76 @@
   let bulkMode = "queue"; // 'queue' = fresh no_email leads; 'skipped' = no_email leads in the Skip bucket. Never verify_failed/manual_failed.
   let bulkSkippedSeen = []; // ids already shown in this visit to the Skipped bucket (session-only, same pattern as the other tabs' *Seen arrays)
   const bulkCard = document.getElementById("bulkCard");
+
+  // The ChatGPT prompt is just reference text shown in a copy-friendly box — nothing here reads the domains or
+  // talks to any AI; the user copies the domains from the left box themselves and pastes them into ChatGPT.
+  const BULK_EMAIL_PROMPT = `I will give you up to 10 company domains at a time.
+
+Find ALL useful emails associated with each company, prioritizing:
+- Founder/owner/CEO/direct decision-maker emails
+- Official company emails
+- Sales/wholesale/B2B emails
+- Support/contact emails
+
+Search the company's website, contact/about/legal pages, public business records, press releases, PDFs, LinkedIn, directories, and other reliable public sources.
+
+For founder/decision-maker emails:
+- If the exact email is publicly available, include it.
+- If the person's name is known and there is a clear company email pattern, you may infer the most likely email.
+- Don't make random guesses.
+
+Include both verified emails and strong pattern-based emails. Don't label them as verified/likely.
+
+OUTPUT EXACTLY LIKE THIS:
+
+1. email1@company.com, email2@company.com
+2. founder@company.com
+3.
+4. info@company.com
+5. sales@company.com, ceo@company.com
+6.
+7. contact@company.com
+8.
+9. support@company.com
+10. founder@company.com
+
+Rules:
+- Same order as my domains.
+- One line per domain.
+- Do NOT repeat domain names.
+- No sources, links, explanations, names, tables, or status labels.
+- No mailto links or backticks.
+- Multiple emails separated by ", ".
+- If nothing is found, leave the line blank after the number.
+- Make it directly copy-pasteable.`;
+
+  function openPromptModal() {
+    const ov = document.createElement("div");
+    ov.className = "modal-overlay";
+    ov.innerHTML = `<div class="modal" role="dialog" aria-modal="true" style="max-width:640px;">
+      <h3>ChatGPT prompt</h3>
+      <p>Paste this into ChatGPT once, then send your 10 domains (one per line, or numbered same as the left box). Copy its reply straight into the paste box on the right.</p>
+      <textarea id="promptBox" readonly style="min-height:320px;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12.5px;">${esc(BULK_EMAIL_PROMPT)}</textarea>
+      <div class="modal-actions" style="margin-top:14px;">
+        <button type="button" class="modal-no" id="promptCloseBtn">Close</button>
+        <button type="button" id="promptCopyBtn" style="background:var(--accent);color:#fff;">Copy prompt</button>
+      </div></div>`;
+    document.body.appendChild(ov);
+    const close = () => { ov.remove(); document.removeEventListener("keydown", onKey); };
+    const onKey = (e) => { if (e.key === "Escape") close(); };
+    document.addEventListener("keydown", onKey);
+    ov.addEventListener("click", (e) => { if (e.target === ov) close(); });
+    ov.querySelector("#promptCloseBtn").addEventListener("click", close);
+    const copyBtn = ov.querySelector("#promptCopyBtn");
+    copyBtn.addEventListener("click", async () => {
+      const ok = await copyText(BULK_EMAIL_PROMPT);
+      copyBtn.textContent = ok ? "Copied ✓" : "Copy failed — select the text manually";
+      if (ok) setTimeout(() => { copyBtn.textContent = "Copy prompt"; }, 1500);
+    });
+    const box = ov.querySelector("#promptBox");
+    box.focus(); box.select();
+  }
+  document.getElementById("bulkPromptBtn").addEventListener("click", openPromptModal);
 
   async function loadBulkStats() {
     const { data, error } = await supabaseClient.rpc("get_email_stats");
