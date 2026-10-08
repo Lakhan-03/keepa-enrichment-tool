@@ -236,6 +236,7 @@
 
   <div id="tab-bulkemails" hidden>
     <p class="subtitle">Work the no-email queue in batches of 10. Copy the domains on the left, search for emails yourself, then paste results on the right in the SAME order — one line per domain, leave a line blank if you can't find anything.</p>
+    <div class="modebar">Showing <select id="bulkMode"><option value="queue">Main queue</option><option value="skipped">Skipped for now</option></select></div>
     <div class="stats" id="bulkStats"></div>
     <div id="bulkCard" class="card"><div class="loading-state">Loading…</div></div>
     <p class="counter" id="bulkCounter"></p>
@@ -803,12 +804,18 @@
   // ================= Bulk Emails tab =================
   // Same no_email queue as the Emails tab above, but hands out up to 10 at once (get_next_email_leads_batch)
   // instead of one at a time, so you can copy all 10 domains out, search for emails yourself across tabs, and
-  // paste everything back in one pass — matched strictly by LINE POSITION (line 1 = domain 1, etc.), never by
-  // guessing which email belongs to which domain. A blank line leaves that domain exactly as it was (no_email) —
-  // it is NOT marked "not found" (that's a separate, one-way action on the Emails tab), so it just comes back
-  // in a later batch. User decision 2026-10-08: blanks always just wait, never auto-marked.
+  // paste everything back in one pass. Matched by an explicit NUMBER prefix (1. / 1/ / 1) all accepted), never
+  // by raw line position — an extra blank line pasted for readability, or a stray unlabeled line, can't shift
+  // anything out of alignment, since a line that doesn't start with a number is just ignored rather than
+  // silently attributed to the wrong domain. Fixed 2026-10-08 after line-position matching proved confusing in
+  // real use (blank lines added for spacing looked identical to "couldn't find it" blanks).
+  // A number with nothing (or no real email) after it, OR a number never mentioned at all, both mean "couldn't
+  // find it" — it is NOT marked "not found" (that's a separate, one-way action on the one-at-a-time Emails tab),
+  // it just goes to the Skip bucket (queue mode) or stays there (skipped mode) and comes back in a later batch.
   let bulkRows = []; // [{company_id, company_name, domain}], in the order shown/pasted
   let bulkLoaded = false;
+  let bulkMode = "queue"; // 'queue' = fresh no_email leads; 'skipped' = no_email leads in the Skip bucket. Never verify_failed/manual_failed.
+  let bulkSkippedSeen = []; // ids already shown in this visit to the Skipped bucket (session-only, same pattern as the other tabs' *Seen arrays)
   const bulkCard = document.getElementById("bulkCard");
 
   async function loadBulkStats() {
@@ -817,6 +824,8 @@
     const d = data[0];
     const n = (v) => Number(v).toLocaleString();
     document.getElementById("tabBtnBulkEmails").textContent = `Bulk Emails (${n(d.queue_no_email)})`;
+    document.querySelector("#bulkMode option[value=queue]").textContent = `Main queue (${n(d.queue_no_email)})`;
+    document.querySelector("#bulkMode option[value=skipped]").textContent = `Skipped for now (${n(d.skipped || 0)})`;
     document.getElementById("bulkStats").innerHTML = `
       <div class="stat pending"><div class="num">${n(d.queue_no_email)}</div><div class="lbl">No email — in queue</div></div>
       <div class="stat"><div class="num">${n(d.pending_verification)}</div><div class="lbl">Verifying</div></div>
@@ -825,19 +834,31 @@
 
   function renderBulkBatch() {
     if (!bulkRows.length) {
-      bulkCard.innerHTML = `<div class="empty-state">No domains waiting for an email right now.</div>`;
+      bulkCard.innerHTML = bulkMode === "skipped"
+        ? (bulkSkippedSeen.length
+            ? `<div class="empty-state">That was the last of the skipped batch. They all stay in the bucket.<br><br><button id="bulkRestartSkipped" type="button" style="background:#eef2ff;color:#4338ca;border:1px solid #c7d2fe">Start from the first again</button></div>`
+            : `<div class="empty-state">No skipped leads waiting for an email right now.</div>`)
+        : `<div class="empty-state">No domains waiting for an email right now.</div>`;
       document.getElementById("bulkCounter").textContent = "";
+      const rs = document.getElementById("bulkRestartSkipped");
+      if (rs) rs.addEventListener("click", () => { bulkSkippedSeen = []; loadBulkBatch(); });
       return;
     }
+    const numbered = bulkRows.map((r, i) => `${i + 1}. ${r.domain}`).join("\n");
     bulkCard.innerHTML = `
       <div class="bulk-grid">
         <div>
           <span class="field-label">Domains (${bulkRows.length}) — copy these</span>
-          <textarea id="bulkDomainsBox" readonly>${esc(bulkRows.map((r) => r.domain).join("\n"))}</textarea>
+          <textarea id="bulkDomainsBox" readonly>${esc(numbered)}</textarea>
         </div>
         <div>
-          <span class="field-label">Paste results here — same order top to bottom, blank line = couldn't find it</span>
-          <textarea id="bulkPasteBox" placeholder="Line 1 = email(s) for domain 1, line 2 for domain 2, and so on. Multiple emails on one line: separate with a comma. Leave a line empty to skip that domain for now."></textarea>
+          <span class="field-label">Paste results here — keep the SAME numbers, replace the domain with the email(s) you found</span>
+          <textarea id="bulkPasteBox" placeholder="Copy the numbered list on the left, then edit it: e.g.
+1.
+2. info@domain2.com
+3. sales@domain3.com, j@domain3.com
+
+1/ 2/ 3/ or 1) 2) 3) all work too. Leave a number blank (or leave it out entirely) if you couldn't find anything — matching is by the NUMBER, not the line position, so extra blank lines are fine."></textarea>
         </div>
       </div>
       <div class="status" id="bulkStatus"></div>
@@ -854,9 +875,16 @@
   async function loadBulkBatch() {
     loadBulkStats();
     bulkCard.innerHTML = `<div class="loading-state">Loading…</div>`;
-    const { data, error } = await supabaseClient.rpc("get_next_email_leads_batch", { p_worker: worker, p_count: 10 });
+    const { data, error } = await supabaseClient.rpc("get_next_email_leads_batch", {
+      p_worker: worker, p_mode: bulkMode,
+      p_exclude: bulkMode === "skipped" && bulkSkippedSeen.length ? bulkSkippedSeen : null,
+      p_count: 10,
+    });
     if (error) { bulkCard.innerHTML = `<div class="empty-state">Error loading batch: ${esc(error.message)}</div>`; return; }
     bulkRows = data || [];
+    // Mark this batch "seen" in the Skipped bucket (session-only) so the next load moves forward instead of
+    // handing back the exact same 10 — mirrors skippedSeen/emailSkippedSeen on the other tabs.
+    if (bulkMode === "skipped" && bulkRows.length) bulkSkippedSeen = [...bulkSkippedSeen, ...bulkRows.map((r) => r.company_id)];
     renderBulkBatch();
   }
 
@@ -866,22 +894,39 @@
     btn.disabled = true;
     status.textContent = "Saving…";
     status.className = "status";
-    const pasted = document.getElementById("bulkPasteBox").value.split("\n");
-    const toRelease = [];
+    // Parse by NUMBER, not line position: only a line starting with "<n>." / "<n>/" / "<n>)" is read at all, and
+    // it's read into byNumber[n] regardless of blank lines elsewhere. A number never mentioned behaves exactly
+    // like a number mentioned with nothing after it — both mean "couldn't find it" (see comment above).
+    const byNumber = {};
+    let unmatchedLines = 0;
+    for (const raw of document.getElementById("bulkPasteBox").value.split("\n")) {
+      const line = raw.trim();
+      if (!line) continue;
+      const m = line.match(/^(\d{1,2})[.\/)\]:]\s*(.*)$/);
+      if (!m) { unmatchedLines++; continue; }
+      byNumber[Number(m[1])] = ((byNumber[Number(m[1])] || "") + " " + m[2]).trim();
+    }
     const lines = [];
     for (let i = 0; i < bulkRows.length; i++) {
       const row = bulkRows[i];
-      const raw = (pasted[i] || "").trim();
-      if (!raw) { toRelease.push(row.company_id); lines.push({ domain: row.domain, msg: "left as-is (no_email)" }); continue; }
-      const emails = [...new Set(raw.split(/[\s,;]+/).map((e) => e.trim().toLowerCase()).filter((e) => e.includes("@")))];
-      if (!emails.length) { toRelease.push(row.company_id); lines.push({ domain: row.domain, msg: "no valid email in that line — left as-is" }); continue; }
+      const raw = (byNumber[i + 1] || "").trim();
+      const emails = raw ? [...new Set(raw.split(/[\s,;]+/).map((e) => e.trim().toLowerCase()).filter((e) => e.includes("@")))] : [];
+      if (!emails.length) {
+        // Blank (or junk) line = couldn't find it. Queue mode: move it to the Skipped bucket (same meaning as the
+        // "Skip for now" button elsewhere) so it stops reappearing in Main queue batches. Skipped mode: it's
+        // already skipped — just release the claim so a later batch (after a restart) can show it again.
+        if (bulkMode === "skipped") { await supabaseClient.rpc("release_email_lead", { p_company_id: row.company_id }); lines.push({ domain: row.domain, msg: "left in Skipped bucket" }); }
+        else { await supabaseClient.rpc("skip_email_lead_for_now", { p_company_id: row.company_id, p_worker: worker }); lines.push({ domain: row.domain, msg: "moved to Skipped for now" }); }
+        continue;
+      }
       const { data, error } = await supabaseClient.rpc("submit_manual_emails", { p_company_id: row.company_id, p_emails: emails });
-      if (error) { toRelease.push(row.company_id); lines.push({ domain: row.domain, msg: "ERROR: " + error.message }); continue; }
+      if (error) { await supabaseClient.rpc("release_email_lead", { p_company_id: row.company_id }); lines.push({ domain: row.domain, msg: "ERROR: " + error.message }); continue; }
       const dups = (data && data.duplicates) || [];
       lines.push({ domain: row.domain, msg: `saved ${data.saved} email(s)${dups.length ? ` (${dups.length} already seen before, skipped)` : ""}` });
     }
-    if (toRelease.length) await supabaseClient.rpc("release_email_leads_batch", { p_company_ids: toRelease });
-    document.getElementById("bulkResults").innerHTML = `<table class="found"><tr><th>Domain</th><th>Result</th></tr>${lines.map((l) => `<tr><td>${esc(l.domain)}</td><td>${esc(l.msg)}</td></tr>`).join("")}</table>`;
+    document.getElementById("bulkResults").innerHTML =
+      (unmatchedLines ? `<div class="why">⚠ ${unmatchedLines} pasted line(s) didn't start with a number (like "3." or "3/") and were ignored — nothing was saved from them. Check your paste if that wasn't expected.</div>` : "") +
+      `<table class="found"><tr><th>Domain</th><th>Result</th></tr>${lines.map((l) => `<tr><td>${esc(l.domain)}</td><td>${esc(l.msg)}</td></tr>`).join("")}</table>`;
     status.textContent = "Batch done — loading next 10…";
     status.className = "status success";
     setTimeout(loadBulkBatch, 1200);
@@ -1056,6 +1101,7 @@
 
   document.getElementById("domainMode").addEventListener("change", (e) => { domainMode = e.target.value; skippedSeen = []; loadNext(); });
   document.getElementById("emailMode").addEventListener("change", (e) => { emailMode = e.target.value; emailSkippedSeen = []; loadNextEmail(); });
+  document.getElementById("bulkMode").addEventListener("change", (e) => { bulkMode = e.target.value; bulkSkippedSeen = []; loadBulkBatch(); });
   showWho();
   loadNext();
   loadEmailStats(); // fills the count on the Emails tab button right away
