@@ -182,6 +182,7 @@
   <div class="healthbar" id="healthbar">System health: checking…</div>
   <div class="tabs">
     <button class="tab active" id="tabBtnDomains" type="button">Domains</button>
+    <button class="tab" id="tabBtnVerifier" type="button">Verifier</button>
     <button class="tab" id="tabBtnEmails" type="button">Emails</button>
     <button class="tab" id="tabBtnBulkEmails" type="button">Bulk Emails</button>
     <button class="tab" id="tabBtnAmzbees" type="button">Amazon Bees</button>
@@ -201,6 +202,13 @@
   </div>
 
   <p class="counter" id="counter"></p>
+  </div>
+
+  <div id="tab-verifier" hidden>
+  <p class="subtitle">Domains an automated guess found and existence-checked, but a human hasn't confirmed yet. Check the candidate site, then say yes or no.</p>
+  <div class="stats" id="verifyStats"></div>
+  <div id="verifyContent" class="card"><div class="loading-state">Loading…</div></div>
+  <p class="counter" id="verifyCounter"></p>
   </div>
 
   <div id="tab-stats" hidden>
@@ -501,6 +509,109 @@
     if (othersDidIt) { const st = document.getElementById("status"); if (st) { st.textContent = "That one was just finished by someone else — here's the next one."; st.className = "status"; } }
   }
 
+  // ================= Verifier tab =================
+  // Reviews domain_candidate for sellers an auto-guess script already existence-checked (see
+  // scripts/auto-domain-guess.ts) but a human hasn't confirmed. Confirm -> saved as the real domain, same as
+  // the Domains tab. Reject -> back to the normal Domains queue for a full manual lookup, nothing lost.
+  let verifyCurrent = null;
+  let verifyHandled = 0;
+  let verifyLoaded = false;
+  const verifyContent = document.getElementById("verifyContent");
+  const verifyCounter = document.getElementById("verifyCounter");
+
+  async function loadVerifyStats() {
+    const { data, error } = await supabaseClient.rpc("get_verify_stats");
+    if (error || !data || !data[0]) return;
+    const d = data[0];
+    const n = (v) => Number(v).toLocaleString();
+    document.getElementById("tabBtnVerifier").textContent = `Verifier (${n(d.pending_verify)})`;
+    document.getElementById("verifyStats").innerHTML = `
+      <div class="stat pending"><div class="num">${n(d.pending_verify)}</div><div class="lbl">Waiting for you</div></div>
+      <div class="stat found"><div class="num">${n(d.confirmed_lifetime)}</div><div class="lbl">Confirmed (lifetime)</div></div>
+      <div class="stat"><div class="num" style="color:#b45309">${n(d.rejected_lifetime)}</div><div class="lbl">Rejected (lifetime)</div></div>`;
+  }
+
+  function renderVerifyEmpty() {
+    verifyContent.innerHTML = `<div class="empty-state">Nothing waiting for review right now.</div>`;
+    verifyCounter.textContent = "";
+  }
+
+  function renderVerifySeller(s) {
+    verifyCurrent = s;
+    verifyContent.innerHTML = `
+      <div class="lead-grid"><div class="lead-info">
+      <div class="revenue">${formatRevenue(s.estimated_monthly_revenue_min_usd)}</div>
+      <div class="business-name">${s.seller_name || "(no name)"}</div>
+
+      <div class="field seller-link">
+        <span class="field-label">Seller link</span>
+        <a class="val" href="${s.seller_link}" target="_blank" rel="noopener">${s.seller_link}</a>
+      </div>
+      <div class="field">
+        <span class="field-label">Business</span><span class="val">${s.business_name || "n/a"}</span>
+      </div>
+      <div class="field address-line">
+        <span class="field-label">Address</span><span class="val">${formatAddress(s.address)}${s.address_country ? " (" + s.address_country + ")" : ""}</span>
+      </div>
+      ${(s.vat_id || s.trade_number) ? `<div class="field">
+        <span class="field-label">VAT / Trade number</span>
+        <span class="val">${esc([s.vat_id, s.trade_number].filter(Boolean).join(" · "))}</span>
+        ${s.trade_number ? `<a href="https://find-and-update.company-information.service.gov.uk/search?q=${encodeURIComponent(s.trade_number)}" target="_blank" rel="noopener" style="margin-left:8px;">Companies House search</a>` : ""}
+      </div>` : ""}
+      <div class="field">
+        <span class="field-label">Brand</span><span class="val">${s.top_product_brand || "n/a"}</span>
+      </div>
+      ${s.top_product_title ? `<div class="field"><span class="field-label">Product</span><span class="val">${s.top_product_title}</span></div>` : ""}
+
+      </div>
+      <div class="lead-actions">
+      <div class="field" style="background:#eff6ff;border:1px solid #bfdbfe;border-radius:10px;padding:12px;">
+        <span class="field-label">Candidate domain (auto-guessed, not yet confirmed)</span>
+        <a class="val" href="https://${s.domain_candidate}" target="_blank" rel="noopener" style="font-size:17px;font-weight:700;">${s.domain_candidate}</a>
+      </div>
+      <div class="status" id="verifyStatus"></div>
+
+      <div class="actions-row">
+        <button id="verifySkipBtn" type="button">Skip for now</button>
+        <button id="verifyRejectBtn" type="button" style="background:#fef2f2;color:#b91c1c;border:1px solid #fecaca;">✗ Wrong — reject</button>
+        <button id="verifyConfirmBtn" type="button" style="background:var(--green);color:#fff;">✓ Correct — confirm</button>
+      </div>
+      </div></div>
+    `;
+
+    const status = document.getElementById("verifyStatus");
+    document.getElementById("verifyConfirmBtn").addEventListener("click", async () => {
+      document.getElementById("verifyConfirmBtn").disabled = true;
+      const { error } = await supabaseClient.rpc("confirm_verified_domain", { p_seller_id: verifyCurrent.seller_id, p_worker: worker });
+      if (error) { status.textContent = "Error: " + error.message; status.className = "status error"; document.getElementById("verifyConfirmBtn").disabled = false; return; }
+      verifyHandled++;
+      loadNextVerify();
+    });
+    document.getElementById("verifyRejectBtn").addEventListener("click", async () => {
+      document.getElementById("verifyRejectBtn").disabled = true;
+      const { error } = await supabaseClient.rpc("reject_verified_domain", { p_seller_id: verifyCurrent.seller_id, p_worker: worker });
+      if (error) { status.textContent = "Error: " + error.message; status.className = "status error"; document.getElementById("verifyRejectBtn").disabled = false; return; }
+      verifyHandled++;
+      loadNextVerify();
+    });
+    document.getElementById("verifySkipBtn").addEventListener("click", async () => {
+      document.getElementById("verifySkipBtn").disabled = true;
+      await supabaseClient.rpc("release_seller", { p_seller_id: verifyCurrent.seller_id });
+      loadNextVerify();
+    });
+
+    verifyCounter.textContent = `${verifyHandled} handled this session`;
+  }
+
+  async function loadNextVerify() {
+    loadVerifyStats();
+    verifyContent.innerHTML = `<div class="loading-state">Loading…</div>`;
+    const { data, error } = await supabaseClient.rpc("get_next_verify_seller", { p_worker: worker });
+    if (error) { verifyContent.innerHTML = `<div class="empty-state">Error loading queue: ${error.message}</div>`; return; }
+    if (!data || data.length === 0) { renderVerifyEmpty(); return; }
+    renderVerifySeller(data[0]);
+  }
+
   // ================= Emails tab =================
   const esc = (t) => String(t ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
   // Same generic-brand list as worker/competitors.ts's NOT_A_BRAND — a placeholder value like "Generic" or
@@ -524,6 +635,7 @@
 
   function showTab(which) {
     document.getElementById("tab-domains").hidden = which !== "domains";
+    document.getElementById("tab-verifier").hidden = which !== "verifier";
     document.getElementById("tab-emails").hidden = which !== "emails";
     document.getElementById("tab-bulkemails").hidden = which !== "bulkemails";
     document.getElementById("tab-amzbees").hidden = which !== "amzbees";
@@ -534,14 +646,17 @@
     document.getElementById("tabBtnHealth").classList.toggle("active", which === "health");
     if (which === "health") loadHealthTab();
     document.getElementById("tabBtnDomains").classList.toggle("active", which === "domains");
+    document.getElementById("tabBtnVerifier").classList.toggle("active", which === "verifier");
     document.getElementById("tabBtnEmails").classList.toggle("active", which === "emails");
     document.getElementById("tabBtnBulkEmails").classList.toggle("active", which === "bulkemails");
     document.getElementById("tabBtnAmzbees").classList.toggle("active", which === "amzbees");
+    if (which === "verifier" && !verifyLoaded) { verifyLoaded = true; loadNextVerify(); }
     if (which === "emails" && !emailsLoaded) { emailsLoaded = true; loadNextEmail(); }
     if (which === "bulkemails" && !bulkLoaded) { bulkLoaded = true; loadBulkBatch(); }
     if (which === "amzbees" && !amzLoaded) { amzLoaded = true; loadNextAmz(); }
   }
   document.getElementById("tabBtnDomains").addEventListener("click", () => showTab("domains"));
+  document.getElementById("tabBtnVerifier").addEventListener("click", () => showTab("verifier"));
   document.getElementById("tabBtnEmails").addEventListener("click", () => showTab("emails"));
   document.getElementById("tabBtnBulkEmails").addEventListener("click", () => showTab("bulkemails"));
   document.getElementById("tabBtnAmzbees").addEventListener("click", () => showTab("amzbees"));
@@ -1170,7 +1285,7 @@ Rules:
       el.insertAdjacentElement("afterend", b);
     });
   }
-  ["content", "emailContent", "amzContent"].forEach((id) => {
+  ["content", "verifyContent", "emailContent", "amzContent"].forEach((id) => {
     const el = document.getElementById(id);
     new MutationObserver(() => addCopyButtons(el)).observe(el, { childList: true, subtree: true });
   });
@@ -1180,6 +1295,7 @@ Rules:
   document.getElementById("bulkMode").addEventListener("change", (e) => { bulkMode = e.target.value; bulkSkippedSeen = []; loadBulkBatch(); });
   showWho();
   loadNext();
+  loadVerifyStats(); // fills the count on the Verifier tab button right away
   loadEmailStats(); // fills the count on the Emails tab button right away
   loadBulkStats(); // fills the count on the Bulk Emails tab button right away
 </script>
