@@ -526,7 +526,7 @@
     document.getElementById("tabBtnVerifier").textContent = `Verifier (${n(d.pending_verify)})`;
     document.getElementById("verifyStats").innerHTML = `
       <div class="stat pending"><div class="num">${n(d.pending_verify)}</div><div class="lbl">Waiting for you</div></div>
-      <div class="stat found"><div class="num">${n(d.confirmed_lifetime)}</div><div class="lbl">Confirmed (lifetime)</div></div>
+      <div class="stat found"><div class="num">${n(d.confirmed_lifetime)}</div><div class="lbl">Confirmed (lifetime)${Number(d.ai_confirmed_lifetime) ? ` — ${n(d.ai_confirmed_lifetime)} Verifier - Auto` : ""}</div></div>
       <div class="stat"><div class="num" style="color:#b45309">${n(d.rejected_lifetime)}</div><div class="lbl">Rejected (lifetime)</div></div>`;
   }
 
