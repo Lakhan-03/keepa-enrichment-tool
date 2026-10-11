@@ -613,6 +613,9 @@
 
   // ================= Emails tab =================
   const esc = (t) => String(t ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+  // Narrow table column headers only — "Verifier - Auto"/"Verifier - Manual" are too wide next to short
+  // columns like "Found"/"Lakhan"/"Tushar". The big stat cards above keep the full label (room to spare there).
+  const shortLabel = (n) => n.replace("Verifier - ", "V-");
   // Same generic-brand list as worker/competitors.ts's NOT_A_BRAND — a placeholder value like "Generic" or
   // "Unbranded" makes a Google search useless, so skip it and fall back to seller name, then business name.
   // (Named differently from the NOT_A_BRAND above — that one's a domain blocklist, this is a brand-word list;
@@ -1262,7 +1265,7 @@ Rules:
         ${card(t.found, "Domains found today", deltaHtml(t.found, y ? y.found : null, "yesterday"), true)}
         ${personCards}
       </div>
-      <table class="days"><tr><th>Day</th><th class="g1 gs">Scanned</th><th class="g1">ICP</th><th class="g1">ICP %</th><th class="g1">Domain %</th><th class="g2 gs">Found</th>${names.map((n, i) => `<th class="g2">${esc(n)}</th>`).join("")}<th class="g2">Not found</th><th class="g2">Skipped</th><th>vs previous day</th></tr>${rowsHtml || `<tr><td colspan="11">No data yet</td></tr>`}</table>
+      <table class="days"><tr><th>Day</th><th class="g1 gs">Scanned</th><th class="g1">ICP</th><th class="g1">ICP %</th><th class="g1">Domain %</th><th class="g2 gs">Found</th>${names.map((n, i) => `<th class="g2">${esc(shortLabel(n))}</th>`).join("")}<th class="g2">Not found</th><th class="g2">Skipped</th><th>vs previous day</th></tr>${rowsHtml || `<tr><td colspan="11">No data yet</td></tr>`}</table>
       <p class="counter" style="margin-top:10px">Scanned = sellers the sweep looked at; ICP = those that fit; Domain % = found ÷ (found + not found) that day. Found = a website was saved. Skipped = leads put in the Skip-for-now bucket that day (they stay there until you pick them from the dropdown). Days follow India time. "So far" figures for today grow through the day. Entries saved before names were tracked (before 25 Sep) are counted under Tushar.</p>`;
   }
   setInterval(() => { if (!document.getElementById("tab-stats").hidden) loadStats2(); }, 2 * 60 * 1000);
