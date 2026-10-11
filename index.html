@@ -319,7 +319,7 @@
   function showWho() {
     const el = document.getElementById("whoami");
     el.innerHTML = `Working as <b>${worker.replace(/[<>&]/g, "")}</b> · <a id="changeName">change</a>`;
-    document.getElementById("changeName").onclick = () => { askName(true); showWho(); loadNext(); if (emailsLoaded) loadNextEmail(); };
+    document.getElementById("changeName").onclick = () => { askName(true); showWho(); loadNext(); };
   }
   askName(false);
 
@@ -515,7 +515,6 @@
   // the Domains tab. Reject -> back to the normal Domains queue for a full manual lookup, nothing lost.
   let verifyCurrent = null;
   let verifyHandled = 0;
-  let verifyLoaded = false;
   const verifyContent = document.getElementById("verifyContent");
   const verifyCounter = document.getElementById("verifyCounter");
 
@@ -630,7 +629,6 @@
   const emailCounter = document.getElementById("emailCounter");
   let emailCurrent = null;
   let emailHandled = 0;
-  let emailsLoaded = false;
   let emailNotice = ""; // shown once above the next lead
 
   function showTab(which) {
@@ -650,10 +648,15 @@
     document.getElementById("tabBtnEmails").classList.toggle("active", which === "emails");
     document.getElementById("tabBtnBulkEmails").classList.toggle("active", which === "bulkemails");
     document.getElementById("tabBtnAmzbees").classList.toggle("active", which === "amzbees");
-    if (which === "verifier" && !verifyLoaded) { verifyLoaded = true; loadNextVerify(); }
-    if (which === "emails" && !emailsLoaded) { emailsLoaded = true; loadNextEmail(); }
-    if (which === "bulkemails" && !bulkLoaded) { bulkLoaded = true; loadBulkBatch(); }
-    if (which === "amzbees" && !amzLoaded) { amzLoaded = true; loadNextAmz(); }
+    // Fixed 2026-10-11: these used to lazy-load ONCE and never refetch on a later switch back to the tab —
+    // real incident: a lead confirmed in the Verifier tab kept appearing in an already-rendered Domains tab
+    // card until a full page reload, because switching tabs back and forth never re-queried the database.
+    // Every switch now re-fetches fresh, same as Stats/Health already did.
+    if (which === "domains") loadNext();
+    if (which === "verifier") loadNextVerify();
+    if (which === "emails") loadNextEmail();
+    if (which === "bulkemails") loadBulkBatch();
+    if (which === "amzbees") loadNextAmz();
   }
   document.getElementById("tabBtnDomains").addEventListener("click", () => showTab("domains"));
   document.getElementById("tabBtnVerifier").addEventListener("click", () => showTab("verifier"));
@@ -672,7 +675,6 @@
   let amzEnrichedCount = 0;
   let amzDomainMode = "queue";
   let amzSkippedSeen = [];
-  let amzLoaded = false;
   const amzContent = document.getElementById("amzContent");
   const amzCounter = document.getElementById("amzCounter");
 
@@ -934,7 +936,6 @@
   // find it" — it is NOT marked "not found" (that's a separate, one-way action on the one-at-a-time Emails tab),
   // it just goes to the Skip bucket (queue mode) or stays there (skipped mode) and comes back in a later batch.
   let bulkRows = []; // [{company_id, company_name, domain}], in the order shown/pasted
-  let bulkLoaded = false;
   let bulkMode = "queue"; // 'queue' = fresh no_email leads; 'skipped' = no_email leads in the Skip bucket. Never verify_failed/manual_failed.
   let bulkSkippedSeen = []; // ids already shown in this visit to the Skipped bucket (session-only, same pattern as the other tabs' *Seen arrays)
   const bulkCard = document.getElementById("bulkCard");
