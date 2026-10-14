@@ -854,7 +854,7 @@
     // genuinely there. Ticked ones are a direct trust override (no re-verification) -- separate from the "paste a
     // NEW email" box further down, which always still goes through full automated verification as before.
     const rows = (l.contacts || []).map((c) => `<tr>
-        <td>${c.confirmed ? "✓ confirmed" : `<input type="checkbox" class="confirm-cb" data-id="${esc(c.id)}">`}</td>
+        <td>${c.confirmed ? "✓ confirmed" : `<input type="checkbox" class="confirm-cb" data-id="${esc(c.id)}" style="width:22px;height:22px;cursor:pointer;accent-color:var(--accent)">`}</td>
         <td>${esc(c.email)}</td><td>${esc(c.type)}</td><td>${esc(c.verifier)}</td>
       </tr>`).join("");
     const rev = l.revenue !== null && l.revenue !== undefined ? formatRevenue(l.revenue) : "no sales data";
