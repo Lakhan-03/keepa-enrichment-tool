@@ -308,11 +308,15 @@
   let emailSkippedSeen = [];
 
   // Who is working: asked once, remembered in this browser. It lets the database hand each person DIFFERENT leads (a lead is reserved for 10 minutes).
+  // Title-cased on the way in (2026-10-14) so "Lakhan"/"lakhan"/"LAKHAN" display the same everywhere — matches
+  // normalize_worker_name() on the backend, which is the real fix (this is just so the UI shows the same thing).
+  const titleCase = (s) => s.replace(/\s+/g, " ").trim().toLowerCase().replace(/\b\w/g, (c) => c.toUpperCase());
   let worker = "";
   try { worker = localStorage.getItem("worker_name") || ""; } catch (e) {}
   function askName(force) {
     if (worker && !force) return;
-    const v = (window.prompt("Your name (e.g. Lakhan or Tushar) — so you two never get the same lead:", worker) || "").trim().slice(0, 40);
+    const raw = (window.prompt("Your name (e.g. Lakhan or Tushar) — so you two never get the same lead:", worker) || "").trim().slice(0, 40);
+    const v = raw ? titleCase(raw) : "";
     if (v) { worker = v; try { localStorage.setItem("worker_name", v); } catch (e) {} }
     if (!worker) worker = "anonymous-" + Math.random().toString(36).slice(2, 6);
   }
