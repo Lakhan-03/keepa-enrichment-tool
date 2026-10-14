@@ -850,7 +850,13 @@
 
   function renderEmailLead(l) {
     emailCurrent = l;
-    const rows = (l.contacts || []).map((c) => `<tr><td>${esc(c.email)}</td><td>${esc(c.type)}</td><td>${esc(c.verifier)}</td></tr>`).join("");
+    // Manual confirm (added 2026-10-14): a human checks the lead's real website, ticks any email below that's
+    // genuinely there. Ticked ones are a direct trust override (no re-verification) -- separate from the "paste a
+    // NEW email" box further down, which always still goes through full automated verification as before.
+    const rows = (l.contacts || []).map((c) => `<tr>
+        <td>${c.confirmed ? "✓ confirmed" : `<input type="checkbox" class="confirm-cb" data-id="${esc(c.id)}">`}</td>
+        <td>${esc(c.email)}</td><td>${esc(c.type)}</td><td>${esc(c.verifier)}</td>
+      </tr>`).join("");
     const rev = l.revenue !== null && l.revenue !== undefined ? formatRevenue(l.revenue) : "no sales data";
     emailContent.innerHTML = `
       <div class="lead-grid"><div class="lead-info">
@@ -864,15 +870,17 @@
       <div class="field"><span class="field-label">Hero keyword</span><span class="val">${esc(l.hero_keyword || "n/a")}</span></div>
       <div class="field"><span class="field-label">Competitors</span><span class="val">${esc(l.competitor_1 || "n/a")}</span> · <span class="val">${esc(l.competitor_2 || "n/a")}</span></div>
       <div class="why"><strong>What happened:</strong> ${esc(l.note || "-")}</div>
-      ${rows ? `<table class="found"><tr><th>Already found</th><th>Type</th><th>Verifier said</th></tr>${rows}</table>` : ""}
+      ${rows ? `<table class="found"><tr><th>Confirm?</th><th>Already found</th><th>Type</th><th>Verifier said</th></tr>${rows}</table>
+        <div style="font-size:13px;color:var(--muted);margin:4px 0 10px">Checked a box above? Open the website and look for that email yourself first — ticking it pushes it straight through, no automated re-check.</div>` : ""}
       </div>
       <div class="lead-actions">
-      <textarea id="emailInput" placeholder="Paste one or more emails — one per line, or separated by commas"></textarea>
+      <div style="font-size:13px;color:var(--muted);margin-bottom:4px">Found a different, NEW email not listed above? Paste it below — it still goes through full automated verification, same as always.</div>
+      <textarea id="emailInput" placeholder="Paste one or more NEW emails — one per line, or separated by commas"></textarea>
       <div class="status" id="emailStatus"></div>
       <div class="actions-row">
         <button id="emailSkipBtn" type="button">${emailMode === "skipped" ? "Next skipped lead" : "Skip for now"}</button>
         <button id="emailNotFoundBtn">Couldn't find any — mark as not findable</button>
-        <button id="emailSaveBtn" style="background: var(--accent); color: white;">Save emails</button>
+        <button id="emailSaveBtn" style="background: var(--accent); color: white;">Save</button>
       </div>
       </div></div>`;
     const input = document.getElementById("emailInput");
@@ -882,25 +890,45 @@
 
     saveBtn.addEventListener("click", async () => {
       const emails = [...new Set(input.value.split(/[\s,;]+/).map((e) => e.trim().toLowerCase()).filter((e) => e.includes("@")))];
-      if (!emails.length) { status.textContent = "Paste at least one email address."; status.className = "status error"; return; }
+      const checkedIds = [...document.querySelectorAll(".confirm-cb:checked")].map((cb) => cb.dataset.id);
+      if (!emails.length && !checkedIds.length) { status.textContent = "Tick a found email above, or paste a new one below."; status.className = "status error"; return; }
       saveBtn.disabled = true; status.textContent = "Saving…"; status.className = "status";
-      const { data, error } = await supabaseClient.rpc("submit_manual_emails", { p_company_id: emailCurrent.company_id, p_emails: emails });
-      if (error && /not waiting for emails/.test(error.message)) { emailNotice = "That lead was just finished by someone else — here's the next one."; loadNextEmail(); return; }
-      if (error) { status.textContent = error.message; status.className = "status error"; saveBtn.disabled = false; return; }
-      const dups = (data && data.duplicates) || [];
-      const words = dups.map((d) => {
-        const ok = ["ok", "ok_for_all", "valid", "accept_all"].includes(d.verifier);
-        return d.same_lead
-          ? (ok ? `${d.email}: already verified (${d.verifier}) for this lead` : `${d.email}: already tested — NOT verified (${d.verifier})`)
-          : `${d.email}: already belongs to another lead`;
-      });
-      if (!data || !data.saved) {
+
+      // Manually confirmed (ticked) emails first — a direct trust override, no automated re-check.
+      let confirmed = 0;
+      for (const id of checkedIds) {
+        const { error: cErr } = await supabaseClient.rpc("confirm_existing_email", { p_contact_id: id, p_worker: worker });
+        if (cErr) { status.textContent = `Confirm failed: ${cErr.message}`; status.className = "status error"; saveBtn.disabled = false; return; }
+        confirmed++;
+      }
+
+      // New emails typed below — unchanged, still full automated verification.
+      let saved = 0, words = [];
+      if (emails.length) {
+        const { data, error } = await supabaseClient.rpc("submit_manual_emails", { p_company_id: emailCurrent.company_id, p_emails: emails });
+        if (error && /not waiting for emails/.test(error.message) && !confirmed) { emailNotice = "That lead was just finished by someone else — here's the next one."; loadNextEmail(); return; }
+        if (error && !confirmed) { status.textContent = error.message; status.className = "status error"; saveBtn.disabled = false; return; }
+        if (data) {
+          saved = data.saved || 0;
+          words = (data.duplicates || []).map((d) => {
+            const ok = ["ok", "ok_for_all", "valid", "accept_all"].includes(d.verifier);
+            return d.same_lead
+              ? (ok ? `${d.email}: already verified (${d.verifier}) for this lead` : `${d.email}: already tested — NOT verified (${d.verifier})`)
+              : `${d.email}: already belongs to another lead`;
+          });
+        }
+      }
+
+      if (!confirmed && !saved) {
         status.textContent = "Nothing new saved. " + words.join(" · ");
         status.className = "status error";
         saveBtn.disabled = false;
         return;
       }
-      emailNotice = `Saved ${data.saved} new email(s) — verifying automatically.` + (words.length ? ` Skipped: ${words.join(" · ")}` : "");
+      const parts = [];
+      if (confirmed) parts.push(`${confirmed} manually confirmed — pushed, no re-check`);
+      if (saved) parts.push(`${saved} new email(s) — verifying automatically`);
+      emailNotice = parts.join("; ") + (words.length ? ` · Skipped: ${words.join(" · ")}` : "");
       emailHandled++;
       loadNextEmail();
     });
