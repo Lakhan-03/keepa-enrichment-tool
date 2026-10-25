@@ -5,48 +5,76 @@
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>Amz Bees — Toy Sellers (manual domain entry)</title>
 <style>
-  :root { --bg:#f8fafc; --card:#fff; --border:#e2e8f0; --text:#0f172a; --muted:#64748b; --accent:#2563eb; --green:#16a34a; --red:#dc2626; }
+  :root { --bg:#f8fafc; --card:#fff; --border:#e2e8f0; --text:#0f172a; --muted:#64748b; --accent:#2563eb; --accent-hover:#1d4ed8; --green:#16a34a; --red:#dc2626; }
   @media (prefers-color-scheme: dark) {
     :root:not([data-theme="light"]) { --bg:#0b1220; --card:#121a2b; --border:#28344a; --text:#e5e9f2; --muted:#93a0b8; }
   }
   * { box-sizing: border-box; }
   body { margin:0; font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif; background:var(--bg); color:var(--text); padding:16px; }
-  .wrap { max-width:640px; margin:0 auto; }
-  h1 { font-size:18px; margin:0 0 4px; }
-  .sub { color:var(--muted); font-size:13px; margin-bottom:16px; }
-  .card { background:var(--card); border:1px solid var(--border); border-radius:14px; padding:18px; margin-bottom:14px; }
-  .stats { display:flex; gap:10px; flex-wrap:wrap; margin-bottom:14px; }
-  .stat { flex:1; min-width:90px; background:var(--card); border:1px solid var(--border); border-radius:12px; padding:10px; text-align:center; }
+  .wrap { max-width:720px; margin:0 auto; }
+  @media (min-width: 900px) { .wrap { max-width: 1180px; } }
+  h1 { font-size:18px; font-weight:600; margin:0 0 4px; }
+  .subtitle { color:var(--muted); font-size:13px; margin:0 0 14px; }
+  .whoami { font-size:12px; color:var(--muted); margin:-2px 0 10px; }
+  .whoami a { color:var(--accent); cursor:pointer; text-decoration:underline; }
+  .card { background:var(--card); border:1px solid var(--border); border-radius:12px; padding:20px; margin-bottom:16px; }
+  @media (min-width: 900px) { .card { padding:16px 20px; } }
+  .stats { display:grid; grid-template-columns:repeat(auto-fit, minmax(110px, 1fr)); gap:8px; margin-bottom:16px; }
+  .stat { background:var(--card); border:1px solid var(--border); border-radius:10px; padding:10px; text-align:center; }
   .stat .num { font-size:20px; font-weight:700; }
-  .stat .lbl { font-size:11px; color:var(--muted); }
-  .field { margin-bottom:10px; }
-  .field-label { font-size:11px; color:var(--muted); display:block; }
-  .val { font-size:15px; font-weight:600; }
+  .stat .lbl { font-size:11px; color:var(--muted); margin-top:2px; }
+  .revenue { display:inline-block; background:#ecfdf5; color:var(--green); font-weight:700; font-size:16px; padding:4px 12px; border-radius:8px; margin-bottom:12px; }
+  .business-name { font-size:20px; font-weight:700; margin:0 0 12px; }
+  .field { margin:10px 0; font-size:14px; }
+  .field-label { color:var(--muted); display:block; font-size:12px; margin-bottom:2px; user-select:none; -webkit-user-select:none; }
+  .val { display:inline-block; padding:3px 8px; margin-left:-8px; border-radius:6px; background:#f6f7f9; border:1px solid transparent; }
+  @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .val { background:#1a2538; } }
   a.val { color:var(--accent); text-decoration:none; }
-  input[type=text] { width:100%; padding:10px; border:1px solid var(--border); border-radius:10px; font-size:15px; background:var(--card); color:var(--text); }
-  .row { display:flex; gap:8px; margin-top:12px; flex-wrap:wrap; }
-  button { flex:1; min-width:100px; padding:10px 12px; border-radius:10px; border:1px solid var(--border); background:var(--card); color:var(--text); font-size:14px; cursor:pointer; }
-  button.primary { background:var(--green); color:#fff; border:none; }
-  button.danger { background:#fef2f2; color:var(--red); border:1px solid #fecaca; }
-  .status { font-size:13px; margin-top:8px; min-height:18px; }
+  .copybtn { margin-left:6px; padding:2px 6px; font-size:12px; line-height:1; border:1px solid var(--border); background:var(--card); color:var(--muted); border-radius:6px; cursor:pointer; vertical-align:middle; user-select:none; -webkit-user-select:none; }
+  .copybtn:hover { color:var(--accent); border-color:var(--accent); }
+  .copybtn.done { color:#166534; border-color:#86efac; background:#ecfdf5; }
+  .lead-grid { display:block; }
+  @media (min-width: 900px) { .lead-grid { display:grid; grid-template-columns:1.1fr 1fr; gap:32px; align-items:stretch; } }
+  .lead-actions { margin-top:16px; }
+  @media (min-width: 900px) {
+    .lead-actions { display:flex; flex-direction:column; justify-content:center; background:#f9fafb; border:1px solid var(--border); border-radius:10px; padding:28px 24px; gap:22px; margin-top:0; }
+    @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .lead-actions { background:#0e1726; } }
+    .lead-actions .input-row { margin-top:0; gap:12px; }
+    .lead-actions .actions-row { flex-direction:column; gap:16px; margin-top:0; }
+    .lead-actions .actions-row button { width:100%; }
+    .lead-actions input[type=text], .lead-actions .actions-row button, #saveBtn { padding-top:14px; padding-bottom:14px; }
+  }
+  .input-row { display:flex; gap:8px; margin-top:16px; }
+  input[type=text] { flex:1; padding:10px 12px; border:1px solid var(--border); border-radius:8px; font-size:14px; background:var(--card); color:var(--text); }
+  input[type=text]:focus { outline:2px solid var(--accent); border-color:transparent; }
+  .name-input { padding:8px 10px; border:1px solid var(--border); border-radius:8px; font-size:13px; background:var(--card); color:var(--text); margin-left:6px; width:160px; }
+  button { border:none; border-radius:8px; padding:10px 16px; font-size:14px; font-weight:600; cursor:pointer; }
+  #saveBtn { background:var(--accent); color:#fff; }
+  #saveBtn:hover { background:var(--accent-hover); }
+  #saveBtn:disabled { background:#93c5fd; cursor:not-allowed; }
+  .actions-row { display:flex; justify-content:space-between; gap:10px; margin-top:14px; flex-wrap:wrap; }
+  #notFoundBtn { background:#fff7ed; color:#c2410c; border:1px solid #fdba74; flex:1; min-width:140px; }
+  #notFoundBtn:hover { background:#ffedd5; color:#9a3412; }
+  #skipBtn { background:#eef2ff; color:#4338ca; border:1px solid #c7d2fe; flex:1; min-width:100px; }
+  #skipBtn:hover { background:#e0e7ff; color:#3730a3; }
+  .status { font-size:13px; margin-top:10px; min-height:18px; }
   .status.error { color:var(--red); }
-  .empty { text-align:center; color:var(--muted); padding:30px 10px; }
-  .name-row { display:flex; gap:8px; align-items:center; margin-bottom:12px; }
-  .name-row input { flex:1; }
+  .status.success { color:var(--green); }
+  .empty-state, .loading-state { text-align:center; color:var(--muted); padding:40px 20px; }
+  .counter { color:var(--muted); font-size:12px; margin-top:8px; }
+  .pill { display:inline-block; background:#eff6ff; color:var(--accent); border-radius:999px; padding:2px 10px; font-size:12px; font-weight:600; }
 </style>
 </head>
 <body>
 <div class="wrap">
   <h1>Amz Bees — Toy Big Sellers</h1>
-  <div class="sub">Manual domain entry — temporary, separate page for this project only. Folds away once we hit 1,000 leads.</div>
-
-  <div class="name-row">
-    <input id="workerName" type="text" placeholder="Your name (remembered on this browser)" />
-  </div>
+  <div class="subtitle">Manual domain entry — separate, temporary page for this project only. Folds away once we hit 1,000 leads.</div>
+  <div class="whoami" id="whoami"></div>
 
   <div class="stats" id="stats"></div>
 
-  <div class="card" id="content"><div class="empty">Loading…</div></div>
+  <div class="card" id="content"><div class="loading-state">Loading…</div></div>
+  <div class="counter" id="counter"></div>
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
@@ -57,18 +85,47 @@
   const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImdxeGVoaHBidWp6YnpjaGFyc2lvIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODk3NTkwODAsImV4cCI6MjEwNTMzNTA4MH0.ZOp2G8Hdk41uFxZlkomO_wlPfB8itFem31tzNM7y4Oo";
   const supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
-  let worker = localStorage.getItem("amzbees_toys_worker") || "";
-  const workerInput = document.getElementById("workerName");
-  workerInput.value = worker;
-  workerInput.addEventListener("change", () => {
-    worker = workerInput.value.trim();
-    try { localStorage.setItem("amzbees_toys_worker", worker); } catch {}
-  });
-
-  const content = document.getElementById("content");
   const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
   const seen = [];
   let current = null;
+  let enrichedCount = 0;
+
+  // ── worker name (same pattern as the main tool) ──
+  let worker = "";
+  try { worker = localStorage.getItem("amzbees_toys_worker") || ""; } catch {}
+  function askName(force) {
+    if (worker && !force) return;
+    const v = prompt("Your name (so the team can tell who found what):", worker || "");
+    if (v) { worker = v.trim(); try { localStorage.setItem("amzbees_toys_worker", worker); } catch {} }
+    if (!worker) worker = "anonymous-" + Math.random().toString(36).slice(2, 6);
+  }
+  function showWho() {
+    document.getElementById("whoami").innerHTML = `Working as <b>${esc(worker)}</b> · <a id="changeName">change</a>`;
+    document.getElementById("changeName").onclick = () => { askName(true); showWho(); loadNext(); };
+  }
+  askName(false);
+
+  // ── copy-to-clipboard buttons, same behavior as the main tool ──
+  async function copyText(t) {
+    try { await navigator.clipboard.writeText(t); return true; } catch (e) {}
+    try { const ta = document.createElement("textarea"); ta.value = t; ta.style.position = "fixed"; ta.style.opacity = "0"; document.body.appendChild(ta); ta.select(); const ok = document.execCommand("copy"); ta.remove(); return ok; } catch (e) { return false; }
+  }
+  function addCopyButtons(root) {
+    root.querySelectorAll(".val, .business-name").forEach((el) => {
+      if (el.dataset.cp) return;
+      el.dataset.cp = "1";
+      const b = document.createElement("button");
+      b.type = "button"; b.className = "copybtn"; b.title = "Copy"; b.textContent = "⧉";
+      b.addEventListener("click", async () => {
+        const ok = await copyText(el.textContent.trim());
+        b.textContent = ok ? "✓" : "✗"; b.classList.toggle("done", ok);
+        setTimeout(() => { b.textContent = "⧉"; b.classList.remove("done"); }, 1200);
+      });
+      el.insertAdjacentElement("afterend", b);
+    });
+  }
+  const content = document.getElementById("content");
+  new MutationObserver(() => addCopyButtons(content)).observe(content, { childList: true, subtree: true });
 
   async function loadStats() {
     const { data, error } = await supabaseClient.rpc("get_amzbees_toys_stats");
@@ -87,44 +144,64 @@
   }
 
   function renderEmpty() {
-    content.innerHTML = `<div class="empty">Nothing waiting for manual review right now — check back soon.</div>`;
+    content.innerHTML = `<div class="empty-state">Nothing waiting for manual review right now — check back soon.</div>`;
+    document.getElementById("counter").textContent = "";
   }
 
   function renderLead(s) {
     current = s;
-    const addr = Array.isArray(s.address) ? s.address.filter(Boolean).join(", ") : "n/a";
+    const addr = Array.isArray(s.address) ? s.address.filter(Boolean).join(", ") : "";
+    const searchFor = s.top_product_brand || s.business_name || s.seller_name || "";
     content.innerHTML = `
+      <div class="lead-grid"><div class="lead-info">
+      ${s.domain_candidate ? '<div><span class="pill">Auto-guessed — needs confirm</span></div>' : ""}
+      <div class="business-name">${esc(s.seller_name || "(no name)")}</div>
+
       <div class="field"><span class="field-label">Seller link</span><a class="val" href="${esc(s.seller_link)}" target="_blank" rel="noopener">${esc(s.seller_link)}</a></div>
-      <div class="field"><span class="field-label">Seller name</span><span class="val">${esc(s.seller_name || "n/a")}</span></div>
-      <div class="field"><span class="field-label">Business name</span><span class="val">${esc(s.business_name || "n/a")}</span></div>
-      <div class="field"><span class="field-label">Address</span><span class="val">${esc(addr)}${s.address_country ? " (" + esc(s.address_country) + ")" : ""}</span></div>
-      <div class="field"><span class="field-label">Best-selling product brand</span><span class="val">${esc(s.top_product_brand || "n/a")}</span></div>
-      ${s.top_product_title ? `<div class="field"><span class="field-label">Product</span><span class="val">${esc(s.top_product_title)}</span></div>` : ""}
+      ${searchFor ? `<div class="field"><span class="field-label">Find domain</span><a href="https://www.google.com/search?q=${encodeURIComponent(searchFor)}" target="_blank" rel="noopener">Google: "${esc(searchFor)}"</a></div>` : ""}
+      <div class="field"><span class="field-label">Business</span><span class="val">${esc(s.business_name || "n/a")}</span></div>
+      <div class="field"><span class="field-label">Address</span><span class="val">${esc(addr || "n/a")}${s.address_country ? " (" + esc(s.address_country) + ")" : ""}</span></div>
       ${(s.vat_id || s.trade_number) ? `<div class="field"><span class="field-label">VAT / Trade number</span><span class="val">${esc([s.vat_id, s.trade_number].filter(Boolean).join(" · "))}</span></div>` : ""}
-      <div class="field"><span class="field-label">Find it</span>
-        <a class="val" href="https://www.google.com/search?q=${encodeURIComponent((s.top_product_brand || s.business_name || s.seller_name || "") + " founder email")}" target="_blank" rel="noopener">Google search</a>
-      </div>
+      <div class="field"><span class="field-label">Brand</span><span class="val">${esc(s.top_product_brand || "n/a")}</span></div>
+      ${s.top_product_title ? `<div class="field"><span class="field-label">Product</span><span class="val">${esc(s.top_product_title)}</span></div>` : ""}
       ${s.domain_candidate ? `<div class="field" style="background:#eff6ff;border:1px solid #bfdbfe;border-radius:10px;padding:10px;"><span class="field-label">Auto-guessed candidate (not yet confirmed)</span><a class="val" href="https://${esc(s.domain_candidate)}" target="_blank" rel="noopener">${esc(s.domain_candidate)}</a></div>` : ""}
-      <input id="domainInput" type="text" placeholder="example.com" value="${s.domain_candidate ? esc(s.domain_candidate) : ""}" />
-      <div class="status" id="status"></div>
-      <div class="row">
-        <button id="skipBtn" type="button">Skip for now</button>
-        <button id="notFoundBtn" type="button" class="danger">Couldn't find it</button>
-        <button id="saveBtn" type="button" class="primary">Save domain</button>
       </div>
+
+      <div class="lead-actions">
+      <div class="input-row">
+        <input type="text" id="domainInput" placeholder="Paste website / domain here" autocomplete="off" value="${s.domain_candidate ? esc(s.domain_candidate) : ""}" />
+        <button id="saveBtn">Save</button>
+      </div>
+      <div class="status" id="status"></div>
+      <div class="actions-row">
+        <button id="skipBtn" type="button">Skip for now</button>
+        <button id="notFoundBtn" type="button">Couldn't find it</button>
+      </div>
+      </div></div>
     `;
+    const input = document.getElementById("domainInput");
     const status = document.getElementById("status");
-    document.getElementById("saveBtn").addEventListener("click", async () => {
-      const domain = document.getElementById("domainInput").value.trim();
+    const saveBtn = document.getElementById("saveBtn");
+
+    input.addEventListener("keydown", (e) => { if (e.key === "Enter") saveBtn.click(); });
+
+    saveBtn.addEventListener("click", async () => {
+      const domain = input.value.trim();
       if (!domain) { status.textContent = "Enter a domain first."; status.className = "status error"; return; }
-      document.getElementById("saveBtn").disabled = true;
+      saveBtn.disabled = true;
+      status.textContent = "Saving…"; status.className = "status";
       const { error } = await supabaseClient.rpc("submit_amzbees_toys_domain", { p_seller_id: current.seller_id, p_domain: domain, p_worker: worker });
-      if (error) { status.textContent = error.message.includes("already_handled") ? "Someone else already handled this one." : error.message; status.className = "status error"; document.getElementById("saveBtn").disabled = false; return; }
+      if (error) {
+        status.textContent = error.message.includes("already_handled") ? "Someone else already handled this one." : error.message;
+        status.className = "status error"; saveBtn.disabled = false; return;
+      }
+      enrichedCount++;
       loadNext();
     });
     document.getElementById("notFoundBtn").addEventListener("click", async () => {
       document.getElementById("notFoundBtn").disabled = true;
       await supabaseClient.rpc("mark_amzbees_toys_not_found", { p_seller_id: current.seller_id, p_worker: worker });
+      enrichedCount++;
       loadNext();
     });
     document.getElementById("skipBtn").addEventListener("click", async () => {
@@ -132,17 +209,20 @@
       seen.push(current.seller_id);
       loadNext();
     });
+    input.focus();
+    document.getElementById("counter").textContent = `${enrichedCount} handled this session`;
   }
 
   async function loadNext() {
     loadStats();
-    content.innerHTML = `<div class="empty">Loading…</div>`;
+    content.innerHTML = `<div class="loading-state">Loading…</div>`;
     const { data, error } = await supabaseClient.rpc("get_next_amzbees_toys_lead", { p_worker: worker, p_exclude: seen.length ? seen : null });
-    if (error) { content.innerHTML = `<div class="empty">Error: ${esc(error.message)}</div>`; return; }
+    if (error) { content.innerHTML = `<div class="empty-state">Error: ${esc(error.message)}</div>`; return; }
     if (!data || data.length === 0) { renderEmpty(); return; }
     renderLead(data[0]);
   }
 
+  showWho();
   loadNext();
 </script>
 </body>
