@@ -76,10 +76,13 @@
     const d = data[0];
     const n = (v) => Number(v).toLocaleString();
     document.getElementById("stats").innerHTML = `
-      <div class="stat"><div class="num">${n(d.total)}</div><div class="lbl">Total</div></div>
+      <div class="stat"><div class="num">${n(d.total)}</div><div class="lbl">Total sellers</div></div>
+      <div class="stat"><div class="num">${n(d.with_product)}</div><div class="lbl">Processed (have product)</div></div>
       <div class="stat"><div class="num">${n(d.pending)}</div><div class="lbl">Need domain</div></div>
       <div class="stat"><div class="num">${n(d.pending_verify)}</div><div class="lbl">Confirm candidate</div></div>
-      <div class="stat" style="color:var(--green)"><div class="num">${n(d.found)}</div><div class="lbl">Found</div></div>
+      <div class="stat" style="color:var(--green)"><div class="num">${n(d.found)}</div><div class="lbl">Found (total)</div></div>
+      <div class="stat" style="color:var(--green)"><div class="num">${n(d.found_auto)}</div><div class="lbl">Found — auto</div></div>
+      <div class="stat" style="color:var(--accent)"><div class="num">${n(d.found_manual)}</div><div class="lbl">Found — manual</div></div>
       <div class="stat"><div class="num">${n(d.not_found)}</div><div class="lbl">Not found</div></div>`;
   }
 
