@@ -295,6 +295,14 @@
   let skippedSeen = []; // domain leads already looked at in this visit to the Skipped bucket ("Next skipped lead" moves on without removing them)
   let emailSkippedSeen = [];
 
+  // Batch pre-fetch (added 2026-10-25): most of the ~1s per "next lead" click is round-trip time, not
+  // database work — so instead of one DB call per lead, claim 25 at once (1-hour hold) and serve them from
+  // here one at a time; only call the database again once this runs dry. Keyed by mode ('queue'/'skipped')
+  // since switching the dropdown is a different pool — the stale batch for the old mode is simply discarded
+  // (those leads just sit claimed-but-unused until their 1-hour hold expires and they return to the pool).
+  let domainBatch = [];
+  let domainBatchMode = null;
+
   // Who is working: asked once, remembered in this browser. It lets the database hand each person DIFFERENT leads (a lead is reserved for 10 minutes).
   // Title-cased on the way in (2026-10-14) so "Lakhan"/"lakhan"/"LAKHAN" display the same everywhere — matches
   // normalize_worker_name() on the backend, which is the real fix (this is just so the UI shows the same thing).
@@ -487,16 +495,26 @@
 
   async function loadNext(othersDidIt) {
     loadStats();
+    // Serve instantly from the local batch when one's available for this exact mode — no DB round-trip.
+    if (domainBatchMode === domainMode && domainBatch.length > 0) {
+      renderSeller(domainBatch.shift());
+      if (othersDidIt) { const st = document.getElementById("status"); if (st) { st.textContent = "That one was just finished by someone else — here's the next one."; st.className = "status"; } }
+      return;
+    }
     content.innerHTML = `<div class="loading-state">Loading…</div>`;
-    const { data, error } = await supabaseClient.rpc("get_next_enrichment_seller", { p_worker: worker, p_mode: domainMode, p_exclude: domainMode === "skipped" && skippedSeen.length ? skippedSeen : null });
+    const { data, error } = await supabaseClient.rpc("get_next_enrichment_batch", { p_worker: worker, p_mode: domainMode, p_batch_size: 25, p_exclude: domainMode === "skipped" && skippedSeen.length ? skippedSeen : null });
     if (error) {
       content.innerHTML = `<div class="empty-state">Error loading queue: ${error.message}</div>`;
       return;
     }
     if (!data || data.length === 0) {
+      domainBatch = [];
+      domainBatchMode = domainMode;
       renderEmpty();
       return;
     }
+    domainBatch = data.slice(1);
+    domainBatchMode = domainMode;
     renderSeller(data[0]);
     if (othersDidIt) { const st = document.getElementById("status"); if (st) { st.textContent = "That one was just finished by someone else — here's the next one."; st.className = "status"; } }
   }
