@@ -1,0 +1,146 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Amz Bees — Toy Sellers (manual domain entry)</title>
+<style>
+  :root { --bg:#f8fafc; --card:#fff; --border:#e2e8f0; --text:#0f172a; --muted:#64748b; --accent:#2563eb; --green:#16a34a; --red:#dc2626; }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) { --bg:#0b1220; --card:#121a2b; --border:#28344a; --text:#e5e9f2; --muted:#93a0b8; }
+  }
+  * { box-sizing: border-box; }
+  body { margin:0; font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif; background:var(--bg); color:var(--text); padding:16px; }
+  .wrap { max-width:640px; margin:0 auto; }
+  h1 { font-size:18px; margin:0 0 4px; }
+  .sub { color:var(--muted); font-size:13px; margin-bottom:16px; }
+  .card { background:var(--card); border:1px solid var(--border); border-radius:14px; padding:18px; margin-bottom:14px; }
+  .stats { display:flex; gap:10px; flex-wrap:wrap; margin-bottom:14px; }
+  .stat { flex:1; min-width:90px; background:var(--card); border:1px solid var(--border); border-radius:12px; padding:10px; text-align:center; }
+  .stat .num { font-size:20px; font-weight:700; }
+  .stat .lbl { font-size:11px; color:var(--muted); }
+  .field { margin-bottom:10px; }
+  .field-label { font-size:11px; color:var(--muted); display:block; }
+  .val { font-size:15px; font-weight:600; }
+  a.val { color:var(--accent); text-decoration:none; }
+  input[type=text] { width:100%; padding:10px; border:1px solid var(--border); border-radius:10px; font-size:15px; background:var(--card); color:var(--text); }
+  .row { display:flex; gap:8px; margin-top:12px; flex-wrap:wrap; }
+  button { flex:1; min-width:100px; padding:10px 12px; border-radius:10px; border:1px solid var(--border); background:var(--card); color:var(--text); font-size:14px; cursor:pointer; }
+  button.primary { background:var(--green); color:#fff; border:none; }
+  button.danger { background:#fef2f2; color:var(--red); border:1px solid #fecaca; }
+  .status { font-size:13px; margin-top:8px; min-height:18px; }
+  .status.error { color:var(--red); }
+  .empty { text-align:center; color:var(--muted); padding:30px 10px; }
+  .name-row { display:flex; gap:8px; align-items:center; margin-bottom:12px; }
+  .name-row input { flex:1; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Amz Bees — Toy Big Sellers</h1>
+  <div class="sub">Manual domain entry — temporary, separate page for this project only. Folds away once we hit 1,000 leads.</div>
+
+  <div class="name-row">
+    <input id="workerName" type="text" placeholder="Your name (remembered on this browser)" />
+  </div>
+
+  <div class="stats" id="stats"></div>
+
+  <div class="card" id="content"><div class="empty">Loading…</div></div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
+<script>
+  // Same Supabase project as the main enrichment tool — public anon key, safe to expose (every write
+  // goes through a SECURITY DEFINER function with its own validation, same model as the main tool).
+  const SUPABASE_URL = "https://gqxehhpbujzbzcharsio.supabase.co";
+  const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImdxeGVoaHBidWp6YnpjaGFyc2lvIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODk3NTkwODAsImV4cCI6MjEwNTMzNTA4MH0.ZOp2G8Hdk41uFxZlkomO_wlPfB8itFem31tzNM7y4Oo";
+  const supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+  let worker = localStorage.getItem("amzbees_toys_worker") || "";
+  const workerInput = document.getElementById("workerName");
+  workerInput.value = worker;
+  workerInput.addEventListener("change", () => {
+    worker = workerInput.value.trim();
+    try { localStorage.setItem("amzbees_toys_worker", worker); } catch {}
+  });
+
+  const content = document.getElementById("content");
+  const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+  const seen = [];
+  let current = null;
+
+  async function loadStats() {
+    const { data, error } = await supabaseClient.rpc("get_amzbees_toys_stats");
+    if (error || !data || !data[0]) return;
+    const d = data[0];
+    const n = (v) => Number(v).toLocaleString();
+    document.getElementById("stats").innerHTML = `
+      <div class="stat"><div class="num">${n(d.total)}</div><div class="lbl">Total</div></div>
+      <div class="stat"><div class="num">${n(d.pending)}</div><div class="lbl">Need domain</div></div>
+      <div class="stat"><div class="num">${n(d.pending_verify)}</div><div class="lbl">Confirm candidate</div></div>
+      <div class="stat" style="color:var(--green)"><div class="num">${n(d.found)}</div><div class="lbl">Found</div></div>
+      <div class="stat"><div class="num">${n(d.not_found)}</div><div class="lbl">Not found</div></div>`;
+  }
+
+  function renderEmpty() {
+    content.innerHTML = `<div class="empty">Nothing waiting for manual review right now — check back soon.</div>`;
+  }
+
+  function renderLead(s) {
+    current = s;
+    const addr = Array.isArray(s.address) ? s.address.filter(Boolean).join(", ") : "n/a";
+    content.innerHTML = `
+      <div class="field"><span class="field-label">Seller link</span><a class="val" href="${esc(s.seller_link)}" target="_blank" rel="noopener">${esc(s.seller_link)}</a></div>
+      <div class="field"><span class="field-label">Seller name</span><span class="val">${esc(s.seller_name || "n/a")}</span></div>
+      <div class="field"><span class="field-label">Business name</span><span class="val">${esc(s.business_name || "n/a")}</span></div>
+      <div class="field"><span class="field-label">Address</span><span class="val">${esc(addr)}${s.address_country ? " (" + esc(s.address_country) + ")" : ""}</span></div>
+      <div class="field"><span class="field-label">Best-selling product brand</span><span class="val">${esc(s.top_product_brand || "n/a")}</span></div>
+      ${s.top_product_title ? `<div class="field"><span class="field-label">Product</span><span class="val">${esc(s.top_product_title)}</span></div>` : ""}
+      ${(s.vat_id || s.trade_number) ? `<div class="field"><span class="field-label">VAT / Trade number</span><span class="val">${esc([s.vat_id, s.trade_number].filter(Boolean).join(" · "))}</span></div>` : ""}
+      <div class="field"><span class="field-label">Find it</span>
+        <a class="val" href="https://www.google.com/search?q=${encodeURIComponent((s.top_product_brand || s.business_name || s.seller_name || "") + " founder email")}" target="_blank" rel="noopener">Google search</a>
+      </div>
+      ${s.domain_candidate ? `<div class="field" style="background:#eff6ff;border:1px solid #bfdbfe;border-radius:10px;padding:10px;"><span class="field-label">Auto-guessed candidate (not yet confirmed)</span><a class="val" href="https://${esc(s.domain_candidate)}" target="_blank" rel="noopener">${esc(s.domain_candidate)}</a></div>` : ""}
+      <input id="domainInput" type="text" placeholder="example.com" value="${s.domain_candidate ? esc(s.domain_candidate) : ""}" />
+      <div class="status" id="status"></div>
+      <div class="row">
+        <button id="skipBtn" type="button">Skip for now</button>
+        <button id="notFoundBtn" type="button" class="danger">Couldn't find it</button>
+        <button id="saveBtn" type="button" class="primary">Save domain</button>
+      </div>
+    `;
+    const status = document.getElementById("status");
+    document.getElementById("saveBtn").addEventListener("click", async () => {
+      const domain = document.getElementById("domainInput").value.trim();
+      if (!domain) { status.textContent = "Enter a domain first."; status.className = "status error"; return; }
+      document.getElementById("saveBtn").disabled = true;
+      const { error } = await supabaseClient.rpc("submit_amzbees_toys_domain", { p_seller_id: current.seller_id, p_domain: domain, p_worker: worker });
+      if (error) { status.textContent = error.message.includes("already_handled") ? "Someone else already handled this one." : error.message; status.className = "status error"; document.getElementById("saveBtn").disabled = false; return; }
+      loadNext();
+    });
+    document.getElementById("notFoundBtn").addEventListener("click", async () => {
+      document.getElementById("notFoundBtn").disabled = true;
+      await supabaseClient.rpc("mark_amzbees_toys_not_found", { p_seller_id: current.seller_id, p_worker: worker });
+      loadNext();
+    });
+    document.getElementById("skipBtn").addEventListener("click", async () => {
+      await supabaseClient.rpc("release_amzbees_toys_lead", { p_seller_id: current.seller_id });
+      seen.push(current.seller_id);
+      loadNext();
+    });
+  }
+
+  async function loadNext() {
+    loadStats();
+    content.innerHTML = `<div class="empty">Loading…</div>`;
+    const { data, error } = await supabaseClient.rpc("get_next_amzbees_toys_lead", { p_worker: worker, p_exclude: seen.length ? seen : null });
+    if (error) { content.innerHTML = `<div class="empty">Error: ${esc(error.message)}</div>`; return; }
+    if (!data || data.length === 0) { renderEmpty(); return; }
+    renderLead(data[0]);
+  }
+
+  loadNext();
+</script>
+</body>
+</html>
