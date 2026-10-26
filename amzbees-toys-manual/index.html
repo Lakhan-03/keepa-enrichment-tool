@@ -79,7 +79,7 @@
 
   <div class="stats" id="stats"></div>
 
-  <div class="modebar">Showing <select id="mode"><option value="need_domain">Need domain</option><option value="confirm_candidate">Confirm candidate</option></select></div>
+  <div class="modebar">Showing <select id="mode"><option value="need_domain">Need domain</option><option value="confirm_candidate">Confirm candidate</option><option value="need_email">Need email</option><option value="confirm_email">Confirm email</option></select></div>
 
   <div class="card" id="content"><div class="loading-state">Loading…</div></div>
   <div class="counter" id="counter"></div>
@@ -137,25 +137,46 @@
   new MutationObserver(() => addCopyButtons(content)).observe(content, { childList: true, subtree: true });
 
   async function loadStats() {
-    const { data, error } = await supabaseClient.rpc("get_amzbees_toys_stats");
-    if (error || !data || !data[0]) return;
-    const d = data[0];
-    const n = (v) => Number(v).toLocaleString();
-    document.getElementById("stats").innerHTML = `
+    const [{ data: d0, error: e0 }, { data: d1, error: e1 }] = await Promise.all([
+      supabaseClient.rpc("get_amzbees_toys_stats"),
+      supabaseClient.rpc("get_amzbees_toys_email_stats"),
+    ]);
+    const n = (v) => Number(v ?? 0).toLocaleString();
+    let html = "";
+    if (!e0 && d0 && d0[0]) {
+      const d = d0[0];
+      html += `
       <div class="stat"><div class="num">${n(d.total)}</div><div class="lbl">Total sellers</div></div>
       <div class="stat"><div class="num">${n(d.with_product)}</div><div class="lbl">Processed (have product)</div></div>
       <div class="stat"><div class="num">${n(d.pending)}</div><div class="lbl">Need domain</div></div>
       <div class="stat"><div class="num">${n(d.pending_verify)}</div><div class="lbl">Confirm candidate</div></div>
-      <div class="stat" style="color:var(--green)"><div class="num">${n(d.found)}</div><div class="lbl">Found (total)</div></div>
-      <div class="stat" style="color:var(--green)"><div class="num">${n(d.found_auto)}</div><div class="lbl">Found — auto</div></div>
-      <div class="stat" style="color:var(--accent)"><div class="num">${n(d.found_manual)}</div><div class="lbl">Found — manual</div></div>
-      <div class="stat"><div class="num">${n(d.not_found)}</div><div class="lbl">Not found</div></div>`;
+      <div class="stat" style="color:var(--green)"><div class="num">${n(d.found)}</div><div class="lbl">Domain found</div></div>
+      <div class="stat" style="color:var(--green)"><div class="num">${n(d.found_auto)}</div><div class="lbl">Domain — auto</div></div>
+      <div class="stat" style="color:var(--accent)"><div class="num">${n(d.found_manual)}</div><div class="lbl">Domain — manual</div></div>
+      <div class="stat"><div class="num">${n(d.not_found)}</div><div class="lbl">Domain not found</div></div>`;
+    }
+    if (!e1 && d1 && d1[0]) {
+      const d = d1[0];
+      html += `
+      <div class="stat"><div class="num">${n(d.found_hunter_dm)}</div><div class="lbl">Email — Hunter DM</div></div>
+      <div class="stat"><div class="num">${n(d.found_hunter_all)}</div><div class="lbl">Email — Hunter all</div></div>
+      <div class="stat"><div class="num">${n(d.found_scrape)}</div><div class="lbl">Email — scraped</div></div>
+      <div class="stat"><div class="num">${n(d.needs_manual_verify)}</div><div class="lbl">Email — confirm</div></div>
+      <div class="stat"><div class="num">${n(d.needs_manual_feed)}</div><div class="lbl">Email — need feed</div></div>
+      <div class="stat" style="color:var(--green)"><div class="num">${n(d.found)}</div><div class="lbl">Email found</div></div>
+      <div class="stat"><div class="num">${n(d.not_found)}</div><div class="lbl">Email not found</div></div>`;
+    }
+    document.getElementById("stats").innerHTML = html;
   }
 
+  const EMPTY_MSG = {
+    need_domain: "Nothing waiting for manual review right now — check back soon.",
+    confirm_candidate: "No candidates waiting to be confirmed right now.",
+    need_email: "No sellers waiting for a manual email search right now.",
+    confirm_email: "No scraped emails waiting to be confirmed right now.",
+  };
   function renderEmpty() {
-    content.innerHTML = mode === "confirm_candidate"
-      ? `<div class="empty-state">No candidates waiting to be confirmed right now.</div>`
-      : `<div class="empty-state">Nothing waiting for manual review right now — check back soon.</div>`;
+    content.innerHTML = `<div class="empty-state">${EMPTY_MSG[mode] || "Nothing here right now."}</div>`;
     document.getElementById("counter").textContent = "";
   }
 
@@ -268,13 +289,131 @@
     document.getElementById("counter").textContent = `${enrichedCount} handled this session`;
   }
 
+  function renderNeedEmail(s) {
+    current = s;
+    content.innerHTML = `
+      <div class="lead-grid"><div class="lead-info">
+      <div class="business-name">${esc(s.seller_name || "(no name)")}</div>
+      <div class="field"><span class="field-label">Seller link</span><a class="val" href="${esc(s.seller_link)}" target="_blank" rel="noopener">${esc(s.seller_link)}</a></div>
+      <div class="field"><span class="field-label">Website</span><a class="val" href="https://${esc(s.domain)}" target="_blank" rel="noopener">${esc(s.domain)}</a></div>
+      <div class="field"><span class="field-label">Business</span><span class="val">${esc(s.business_name || "n/a")}</span></div>
+      <div class="field"><span class="field-label">Brand</span><span class="val">${esc(s.top_product_brand || "n/a")}</span></div>
+      <div class="field"><span class="field-label">Find founder email</span><a href="https://www.google.com/search?q=${encodeURIComponent((s.domain || "") + " founder email")}" target="_blank" rel="noopener">Google search</a></div>
+      </div>
+      <div class="lead-actions">
+      <div class="input-row">
+        <input type="text" id="emailInput" placeholder="Paste email address here" autocomplete="off" />
+        <button id="saveBtn">Save</button>
+      </div>
+      <div class="status" id="status"></div>
+      <div class="actions-row">
+        <button id="skipBtn" type="button">Skip for now</button>
+        <button id="notFoundBtn" type="button">Couldn't find any</button>
+      </div>
+      </div></div>
+    `;
+    const input = document.getElementById("emailInput");
+    const status = document.getElementById("status");
+    const saveBtn = document.getElementById("saveBtn");
+    input.addEventListener("keydown", (e) => { if (e.key === "Enter") saveBtn.click(); });
+    saveBtn.addEventListener("click", async () => {
+      const email = input.value.trim();
+      if (!email) { status.textContent = "Enter an email first."; status.className = "status error"; return; }
+      saveBtn.disabled = true;
+      status.textContent = "Saving…"; status.className = "status";
+      const { error } = await supabaseClient.rpc("submit_amzbees_toys_email", { p_seller_id: current.seller_id, p_email: email, p_worker: worker });
+      if (error) {
+        status.textContent = error.message.includes("already_handled") ? "Someone else already handled this one." : error.message;
+        status.className = "status error"; saveBtn.disabled = false; return;
+      }
+      enrichedCount++;
+      loadNext();
+    });
+    document.getElementById("notFoundBtn").addEventListener("click", async () => {
+      document.getElementById("notFoundBtn").disabled = true;
+      await supabaseClient.rpc("mark_amzbees_toys_no_email", { p_seller_id: current.seller_id, p_worker: worker });
+      enrichedCount++;
+      loadNext();
+    });
+    document.getElementById("skipBtn").addEventListener("click", async () => {
+      await supabaseClient.rpc("release_amzbees_toys_email_lead", { p_seller_id: current.seller_id });
+      seen.push(current.seller_id);
+      loadNext();
+    });
+    input.focus();
+    document.getElementById("counter").textContent = `${enrichedCount} handled this session`;
+  }
+
+  function renderConfirmEmail(s) {
+    current = s;
+    content.innerHTML = `
+      <div class="lead-grid"><div class="lead-info">
+      <div><span class="pill">Scraped — needs your confirm</span></div>
+      <div class="business-name">${esc(s.seller_name || "(no name)")}</div>
+      <div class="field"><span class="field-label">Seller link</span><a class="val" href="${esc(s.seller_link)}" target="_blank" rel="noopener">${esc(s.seller_link)}</a></div>
+      <div class="field"><span class="field-label">Website — check this page for the email</span><a class="val" href="https://${esc(s.domain)}" target="_blank" rel="noopener">${esc(s.domain)}</a></div>
+      <div class="field"><span class="field-label">Business</span><span class="val">${esc(s.business_name || "n/a")}</span></div>
+      ${s.job_title ? `<div class="field"><span class="field-label">Title found with it</span><span class="val">${esc(s.job_title)}</span></div>` : ""}
+      <div class="field"><span class="field-label">Why it needs a human look</span><span class="val">${esc(s.elv_status || "unverified")}</span></div>
+      </div>
+      <div class="lead-actions">
+      <div class="field" style="background:#eff6ff;border:1px solid #bfdbfe;border-radius:10px;padding:14px;">
+        <span class="field-label">Candidate email</span>
+        <span class="val" style="font-size:17px;font-weight:700;">${esc(s.email)}</span>
+      </div>
+      <div class="status" id="status"></div>
+      <div class="actions-row">
+        <button id="skipBtn" type="button">Skip for now</button>
+        <button id="rejectBtn" type="button">✗ Not real / can't confirm</button>
+        <button id="confirmBtn" type="button">✓ I see it on the site</button>
+      </div>
+      </div></div>
+    `;
+    const status = document.getElementById("status");
+    document.getElementById("confirmBtn").addEventListener("click", async () => {
+      document.getElementById("confirmBtn").disabled = true;
+      const { error } = await supabaseClient.rpc("confirm_amzbees_toys_email", { p_contact_id: current.contact_id, p_worker: worker });
+      if (error) { status.textContent = "Error: " + error.message; status.className = "status error"; document.getElementById("confirmBtn").disabled = false; return; }
+      enrichedCount++;
+      loadNext();
+    });
+    document.getElementById("rejectBtn").addEventListener("click", async () => {
+      document.getElementById("rejectBtn").disabled = true;
+      const { error } = await supabaseClient.rpc("reject_amzbees_toys_email", { p_contact_id: current.contact_id, p_worker: worker });
+      if (error) { status.textContent = "Error: " + error.message; status.className = "status error"; document.getElementById("rejectBtn").disabled = false; return; }
+      enrichedCount++;
+      loadNext();
+    });
+    document.getElementById("skipBtn").addEventListener("click", async () => {
+      await supabaseClient.rpc("release_amzbees_toys_email_lead", { p_seller_id: current.seller_id });
+      seen.push(current.seller_id);
+      loadNext();
+    });
+    document.getElementById("counter").textContent = `${enrichedCount} handled this session`;
+  }
+
+  const RPC_BY_MODE = {
+    need_domain: "get_next_amzbees_toys_lead",
+    confirm_candidate: "get_next_amzbees_toys_lead",
+    need_email: "get_next_amzbees_toys_email_feed",
+    confirm_email: "get_next_amzbees_toys_email_verify",
+  };
+  const RENDER_BY_MODE = {
+    need_domain: renderNeedDomain,
+    confirm_candidate: renderConfirmCandidate,
+    need_email: renderNeedEmail,
+    confirm_email: renderConfirmEmail,
+  };
+
   async function loadNext() {
     loadStats();
     content.innerHTML = `<div class="loading-state">Loading…</div>`;
-    const { data, error } = await supabaseClient.rpc("get_next_amzbees_toys_lead", { p_worker: worker, p_exclude: seen.length ? seen : null, p_mode: mode });
+    const params = { p_worker: worker, p_exclude: seen.length ? seen : null };
+    if (mode === "need_domain" || mode === "confirm_candidate") params.p_mode = mode;
+    const { data, error } = await supabaseClient.rpc(RPC_BY_MODE[mode], params);
     if (error) { content.innerHTML = `<div class="empty-state">Error: ${esc(error.message)}</div>`; return; }
     if (!data || data.length === 0) { renderEmpty(); return; }
-    if (mode === "confirm_candidate") renderConfirmCandidate(data[0]); else renderNeedDomain(data[0]);
+    RENDER_BY_MODE[mode](data[0]);
   }
 
   document.getElementById("mode").addEventListener("change", (e) => { mode = e.target.value; seen = []; loadNext(); });
