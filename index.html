@@ -313,12 +313,22 @@
   const titleCase = (s) => s.replace(/\s+/g, " ").trim().toLowerCase().replace(/\b\w/g, (c) => c.toUpperCase());
   let worker = "";
   try { worker = localStorage.getItem("worker_name") || ""; } catch (e) {}
+  // Added 2026-10-26, user decision: a name is now REQUIRED — no more silent "anonymous-xxxx" fallback when
+  // someone cancels/blanks the prompt. Each anonymous session used to get its own random suffix, so even the
+  // SAME person skipping the prompt twice showed up as two different, untraceable "workers" in the Stats
+  // leaderboard — worse than just asking again. Keeps re-prompting until a real name is given; the one
+  // exception is a RENAME (force=true, clicking "change") being cancelled — that just keeps the existing name
+  // rather than trapping someone in a loop over a rename they decided not to do.
   function askName(force) {
     if (worker && !force) return;
-    const raw = (window.prompt("Your name (e.g. Lakhan or Tushar) — so you two never get the same lead:", worker) || "").trim().slice(0, 40);
-    const v = raw ? titleCase(raw) : "";
-    if (v) { worker = v; try { localStorage.setItem("worker_name", v); } catch (e) {} }
-    if (!worker) worker = "anonymous-" + Math.random().toString(36).slice(2, 6);
+    let v = "";
+    while (!v) {
+      const raw = (window.prompt("Your name (e.g. Lakhan or Tushar) — required, so you two never get the same lead:", worker) || "").trim().slice(0, 40);
+      v = raw ? titleCase(raw) : "";
+      if (!v && force && worker) { v = worker; break; } // cancelled a rename — keep the existing name, don't loop
+    }
+    worker = v;
+    try { localStorage.setItem("worker_name", v); } catch (e) {}
   }
   function showWho() {
     const el = document.getElementById("whoami");
