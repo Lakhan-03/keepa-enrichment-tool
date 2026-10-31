@@ -126,6 +126,34 @@
   .counter { color: var(--muted); font-size: 12px; }
   .whoami { font-size: 12px; color: var(--muted); margin: -6px 0 8px; }
   .whoami a { color: var(--accent); cursor: pointer; text-decoration: underline; }
+  /* Added 2026-10-31: fun motivational milestone banner + quote line, based on domains personally found
+     (get_worker_domain_count). Persistent banner, re-randomizes within its tier periodically; see initMilestones(). */
+  .milestoneBanner {
+    font-size: 13px; font-weight: 600; border-radius: 10px; padding: 8px 12px; margin: 0 0 6px;
+    background: linear-gradient(135deg, #eef2ff, #fdf4ff); border: 1px solid #e0e7ff; color: #3730a3;
+    display: none; transition: opacity 0.4s ease;
+  }
+  .milestoneQuote { font-size: 11px; color: var(--muted); font-style: italic; margin: 0 0 10px; display: none; }
+  .milestoneOverlay {
+    position: fixed; inset: 0; background: rgba(17,24,39,0.55); display: none; align-items: center;
+    justify-content: center; z-index: 9999;
+  }
+  .milestoneOverlay.show { display: flex; }
+  .milestoneCard {
+    background: #fff; border-radius: 16px; padding: 28px 32px; max-width: 360px; text-align: center;
+    box-shadow: 0 20px 60px rgba(0,0,0,0.3); transform: scale(0.85); opacity: 0;
+    animation: milestonePop 0.45s cubic-bezier(.26,1.4,.4,1) forwards;
+  }
+  @keyframes milestonePop { to { transform: scale(1); opacity: 1; } }
+  .milestoneCard .count { font-size: 44px; font-weight: 800; color: var(--accent); line-height: 1; margin-bottom: 6px; }
+  .milestoneCard .line { font-size: 16px; font-weight: 600; margin-bottom: 8px; }
+  .milestoneCard .sub { font-size: 12px; color: var(--muted); font-style: italic; }
+  .milestoneCard button {
+    margin-top: 16px; border: none; background: var(--accent); color: #fff; padding: 8px 20px;
+    border-radius: 8px; cursor: pointer; font-size: 13px; font-weight: 600;
+  }
+  .confettiPiece { position: fixed; top: -10px; z-index: 10000; pointer-events: none; animation: confettiFall linear forwards; }
+  @keyframes confettiFall { to { transform: translateY(105vh) rotate(540deg); opacity: 0.3; } }
   .healthbar { font-size: 12px; border-radius: 8px; padding: 6px 10px; margin: 0 0 10px; background: #f3f4f6; color: var(--muted); }
   .healthbar.ok { background: #ecfdf5; color: #166534; }
   .healthbar.bad { background: #fef2f2; color: #b91c1c; border: 1px solid #fecaca; font-weight: 600; }
@@ -179,6 +207,8 @@
 <div class="wrap">
   <h1>LRT Media - Leads Playground</h1>
   <div class="whoami" id="whoami"></div>
+  <div class="milestoneBanner" id="milestoneBanner"></div>
+  <div class="milestoneQuote" id="milestoneQuote"></div>
   <div class="healthbar" id="healthbar">System health: checking…</div>
   <!-- Added 2026-10-26: a single plain link to the separate, temporary Amz Bees - Toy Big Sellers
        page — deliberately NOT a tab (no shared logic/queries touched). Remove this one line once
@@ -451,6 +481,7 @@
         return;
       }
       enrichedCount++;
+      refreshMilestoneCount(true); // a real domain was just found — check/celebrate, don't fire on "not found" below
       loadNext();
     });
 
@@ -1203,6 +1234,216 @@ Rules:
     new MutationObserver(() => addCopyButtons(el)).observe(el, { childList: true, subtree: true });
   });
 
+  // ───────────────────────────── fun milestone banner/popup (added 2026-10-31) ─────────────────────────────
+  // Based on get_worker_domain_count (domains THIS person personally found, via submit_seller_domain's
+  // domain_by column — backed by idx_keepa_sellers_domain_by, a cheap partial index, same date). Copy
+  // approved by the user before building; cricket-themed milestones at their explicit request.
+  const MILESTONES = [1, 10, 25, 50, 100, 150, 200];
+  const MILESTONE_COPY = {
+    1: [
+      "{{n}}, let's kill it today. 🔥", "{{n}}, first one's in — let's get going. 🚀", "Game on, {{n}}. Let's find some domains. 🎬",
+      "{{n}} has entered the arena. Let's go. 🚀", "First domain down, {{n}} — the grind starts now. 🔥",
+      "{{n}} is live. Let's see what today looks like. ⚡", "Clock's running, {{n}}. First one's in the books. 🕐",
+      "{{n}} just opened the innings. 🏏", "Here we go, {{n}} — one at a time. 🚀", "{{n}} is on the board. ✅",
+      "First strike, {{n}}. Let's build on it. 🔥", "{{n}} showed up. That's step one. 💪", "The chase begins, {{n}}. 🏃",
+      "{{n}}, one domain down, a thousand to go (kidding... mostly). 😄", "First one's always the hardest, {{n}} — nice work. 👏",
+      "{{n}} just took guard. 🏏", "Let's go, {{n}} — nice and steady. 🚀", "{{n}} is officially in the game. 🎮",
+      "One down, {{n}}. Let's keep the bat swinging. 🏏", "{{n}}'s on the pitch. Let's bat. 🏏",
+    ],
+    10: [
+      "{{n}} just hit 10 — momentum is real. ⚡", "10 domains in, {{n}}! We're rolling now. 🔥",
+      "Double digits, {{n}} — let's keep this pace. ⚡", "{{n}} is warming up — 10 down. 🔥",
+      "10 in the bag, {{n}}. Let's go. 🚀", "{{n}} found their rhythm — 10 already. 🎵",
+      "10 up, {{n}}. No signs of first-innings nerves. 🏏", "{{n}}'s engine is warm. 10 and climbing. ⚡",
+      "That's 10, {{n}} — a proper start. 👏", "{{n}} is building something here. 10 down. 🏗️",
+      "10 on the board, {{n}} — looking solid. ✅", "{{n}}'s in the groove. 10 already. 🔥",
+      "Nice tempo, {{n}} — 10 domains in. ⚡", "{{n}} just got their footing. 10 down, more to come. 👟",
+      "10 down, {{n}}. The real innings starts now. 🏏", "{{n}} is cruising — double digits. 🚗",
+      "That's a real start, {{n}}. 10 in. 💪", "{{n}}'s found their stride. 10 and counting. ⚡",
+      "10, {{n}}! Early days but it's looking good. 👀", "{{n}} is 10 deep — keep that pace. 🔥",
+    ],
+    25: [
+      "{{n}} just hit 25 — we're in killing mode now. 🔥", "25 domains, {{n}}! You're cooking. 🍳",
+      "Quarter-century, {{n}} — full send. 🚀", "{{n}} is on a heater. 25 down. 🔥",
+      "25 and counting, {{n}} — no signs of stopping. ⚡", "{{n}} just crossed 25 — real pace now. 🔥",
+      "Quarter ton, {{n}}! Textbook stuff. 🏏", "{{n}}'s innings is taking shape. 25 in. 📈",
+      "25 down, {{n}} — you're starting to look dangerous. 😤", "{{n}} is building a proper total. 25 up. 🏗️",
+      "That's a quarter-century, {{n}}. Keep swinging. 🏏", "{{n}} just found another gear. 25 done. ⚙️",
+      "25, {{n}}! Someone's chasing a big one today. 👀", "{{n}}'s on fire — 25 and climbing. 🔥",
+      "Quarter-century up, {{n}} — the team's noticing. 👏", "{{n}} hit 25 like it was nothing. 😎",
+      "25 down, {{n}}. That's a statement, not a stat. 📣", "{{n}} is in full flow. 25 already. 🌊",
+      "That's 25, {{n}} — momentum has a name today. ⚡", "{{n}} crossed 25 — keep the foot down. 🦶",
+    ],
+    50: [
+      "HALF CENTURY, {{n}}! Legend in the making. 🏏🙌", "{{n}} just brought up the half-ton — 50 domains. 🎉",
+      "50 down, {{n}}. Certified legend status. 👑", "Half century, {{n}}! The team salutes you. 🫡",
+      "{{n}} hits 50 — this is what legends are made of. ⭐", "Fifty up, {{n}}! Take a bow. 🙇",
+      "{{n}} just raised the bat — half century! 🏏", "50, {{n}}! That's not luck, that's form. 🔥",
+      "Half-ton, {{n}} — you're in the zone today. 🎯", "{{n}} brings up the fifty in style. 💅",
+      "50 down, {{n}} — the rest of the team's taking notes. 📝", "Half century for {{n}}! Chef's kiss. 👨‍🍳💋",
+      "{{n}} hit 50 and didn't even break a sweat. 😌", "That's a half-ton, {{n}} — proper innings building. 🏏",
+      "50 up, {{n}}! The crowd (us) is cheering. 📣", "{{n}} just went past 50 — serious business now. 💼",
+      "Half century, {{n}} — bookmark this moment. 🔖", "{{n}} brought up 50 like a pro. 🏅",
+      "50 down, {{n}}! You're carrying the innings. 🏏", "Fifty for {{n}} — and it looks effortless. ✨",
+    ],
+    100: [
+      "CENTURY, {{n}}! That's champ-level stuff. 🏆", "{{n}} just hit a century — 100 domains! Take a bow. 🙇",
+      "100 down, {{n}}. Different league now. 🚀", "Triple digits, {{n}}! Absolute champion. 🏆",
+      "{{n}} reaches 100 — hall of fame material. 🏛️", "CENTURY UP, {{n}}! Someone get the Gatorade. 🥤",
+      "{{n}} just brought up the ton. 100! 💯", "100, {{n}} — this is the stuff of legends now. 👑",
+      "Century for {{n}}! The team is in awe. 😮", "{{n}} hit the ton — raise the bat, take the applause. 🏏👏",
+      "100 down, {{n}}. You're not playing the same game anymore. 🎮", "That's a century, {{n}}! Genuinely elite. 🏆",
+      "{{n}} just went triple digits — champion stuff. 💯", "Century, {{n}}! Mic drop moment. 🎤",
+      "{{n}} reaches 100 — this one goes in the record book. 📖", "100 up, {{n}} — you've made it look routine. 😎",
+      "Ton up, {{n}}! The rest of us are just watching now. 👀", "{{n}} hits a century — absolute scenes. 🎉",
+      "100, {{n}}! That's not a number, that's a statement. 📣", "Century for {{n}} — legend confirmed. 👑",
+    ],
+    150: [
+      "{{n}} just crossed 150 — not slowing down, are you? 😤", "150 domains, {{n}}! Elite territory now. 🏆",
+      "{{n}} at 150 — the engine just doesn't stop. ⚙️🔥", "150 down, {{n}} — basically unstoppable at this point. 🚂",
+      "{{n}} hits 150. Different gear, different player. 🏎️", "150, {{n}}! You're playing a different sport now. 🎮",
+      "{{n}} just went past 150 — ridiculous consistency. 📈", "150 up, {{n}} — the century was just the warm-up. 🔥",
+      "{{n}} at 150. This is starting to look unfair. 😅", "150 down, {{n}}! Someone check if you're human. 🤖",
+      "{{n}} crossed 150 — the bar just moved again. 📏", "150, {{n}}! You're rewriting the leaderboard. 📊",
+      "{{n}} hits 150 — the grind looks easy on you. 💪", "150 up, {{n}} — genuinely special numbers now. ⭐",
+      "{{n}} at 150. Everyone else is chasing shadows. 🏃", "150 down, {{n}}! That's a season's worth of work. 📅",
+      "{{n}} just crossed 150 — still accelerating? ⚡", "150, {{n}}! At this point it's a masterclass. 🎓",
+      "{{n}} hits 150 — the consistency is the scary part. 😳", "150 up, {{n}} — you've left the pack behind. 🐺",
+    ],
+    200: [
+      "200, {{n}}!! You're not just good, you're a record. 📀", "{{n}} just smashed 200 domains — absolute machine. 🤖",
+      "Double century, {{n}}! Hall of Fame, no debate. 👑", "200 down, {{n}} — you've basically built your own league. 🏟️",
+      "{{n}} at 200. Legend status: confirmed. ✅👑", "DOUBLE CENTURY, {{n}}! Take the entire afternoon off (jk, almost). 😄",
+      "{{n}} hits 200 — this is the stuff they'll talk about later. 🗣️", "200 up, {{n}}! You're not on the leaderboard, you ARE the leaderboard. 📊",
+      "{{n}} crossed 200 — genuinely historic numbers. 📜", "Double hundred, {{n}}! Absolute all-timer. 🏆",
+      "{{n}} at 200 — the rest of us are just spectators now. 🍿", "200 down, {{n}}! That's not a milestone, that's a monument. 🗿",
+      "{{n}} hits the double century — take a bow, seriously. 🙇", "200, {{n}}! You've officially entered folklore. 📖",
+      "{{n}} at 200 — the standard just got rewritten. ✍️", "Double ton, {{n}}! We're naming a trophy after you. 🏆",
+      "{{n}} crossed 200 — unreal, genuinely unreal. 🤯", "200 up, {{n}}! This is what greatness looks like. 👑",
+      "{{n}} hits 200 — best innings we've seen here. 🏏", "Double century, {{n}} — absolute legend, full stop. 👑🏆",
+    ],
+  };
+  // Beyond 200, every +50 reuses this pool with the real number dropped in — same request: "keep scaling".
+  const GENERIC_COPY = [
+    "{{n}} just hit {{c}} — are you even human? 🤖", "{{c}} for {{n}}. We've officially run out of cricket metaphors. 🏏😅",
+    "{{n}} crossed {{c}} — someone call this what it is: a legacy. 📜", "{{c}} up, {{n}}! At this point you're the benchmark. 📏",
+    "{{n}} hits {{c}} — still not slowing down. 🔥", "{{c}}, {{n}}! This isn't a streak anymore, it's an identity. 👑",
+    "{{n}} at {{c}} — frankly, a little intimidating. 😳", "{{c}} down, {{n}}! The leaderboard just gave up. 📊🏳️",
+    "{{n}} crossed {{c}} — somebody frame this. 🖼️", "{{c}} for {{n}}. On fire doesn't cover it anymore. 🔥🔥🔥",
+    "{{n}} hits {{c}} — new words needed, honestly. 📖", "{{c}} up, {{n}}! You've lapped the concept of a milestone. 🏃",
+    "{{n}} at {{c}} — this is just showing off now (keep going). 😏", "{{c}}, {{n}}! The team's taking notes on how. 📝",
+    "{{n}} crossed {{c}} — absolute relentless machine. 🤖🔥", "{{c}} down, {{n}}! Someone's chasing immortality. ⚡",
+    "{{n}} hits {{c}} — genuinely remarkable at this point. ⭐", "{{c}} up, {{n}}! You're not climbing the ladder, you built a new one. 🪜",
+    "{{n}} at {{c}} — this is what consistency looks like, framed. 🖼️", "{{c}}, {{n}}! Still going. Still ridiculous. Still earned. 👑",
+  ];
+  const QUOTES = [
+    "Consistency beats intensity — every single time. ✨", "Small wins, stacked daily, win the whole game. 🧱",
+    "The grind doesn't show up on a highlight reel, but it's what gets you there. 🎬", "Nobody remembers the easy days. They remember the streaks. 🔥",
+    "Progress isn't loud. It's just you, showing up again. 🚶", "Discipline is just motivation that outlasted the mood. 💪",
+    "The tenth one is never as exciting as the first — do it anyway. 🔟", "Momentum isn't found. It's built, one boring rep at a time. ⚙️",
+    "You don't rise to your goals, you fall to your systems. 📉➡️📈", "The work doesn't care how you feel about it today. 🤷",
+    "Streaks aren't about talent. They're about showing up on the bad days too. 📅", "Nobody claps for the 47th one. Do it anyway. 👏",
+    "Good days build confidence. Bad days build character. Both count. ⚖️", "The compound interest on effort is just slower to notice. 📈",
+    "You're not behind. You're mid-streak. 🏃", "Boring and consistent beats exciting and occasional. 🐢",
+    "Every number on that board used to be zero. 0️⃣", "The difference between a streak and a slump is one more rep. 1️⃣",
+    "Nobody becomes a legend on their best day. It's the average of every day. 📊", "Keep going. The next one always comes easier than the last. 🚀",
+  ];
+  function pick(arr) { return arr[Math.floor(Math.random() * arr.length)]; }
+  function tierOf(count) {
+    let t = null;
+    for (const m of MILESTONES) if (count >= m) t = m; else break;
+    if (count >= 250) t = "generic"; // 250+ always uses the generic pool, even though 200 is technically still a MILESTONES entry
+    return t;
+  }
+  function milestoneLine(count) {
+    const t = tierOf(count);
+    if (t === null) return null;
+    const name = worker.replace(/[<>&{}]/g, "") || "You";
+    if (t === "generic") {
+      const roundedTier = Math.floor(count / 50) * 50; // e.g. 263 -> "250"
+      return pick(GENERIC_COPY).replace(/{{n}}/g, name).replace(/{{c}}/g, roundedTier);
+    }
+    return pick(MILESTONE_COPY[t]).replace(/{{n}}/g, name);
+  }
+  function renderBanner() {
+    const el = document.getElementById("milestoneBanner");
+    const line = milestoneLine(window.__milestoneCount || 0);
+    if (!line) { el.style.display = "none"; return; }
+    el.textContent = line;
+    el.style.display = "block";
+  }
+  function renderQuote() {
+    const el = document.getElementById("milestoneQuote");
+    el.textContent = pick(QUOTES);
+    el.style.display = "block";
+  }
+  function fireConfetti() {
+    const colors = ["#2563eb", "#f59e0b", "#16a34a", "#db2777", "#7c3aed"];
+    for (let i = 0; i < 60; i++) {
+      const p = document.createElement("div");
+      p.className = "confettiPiece";
+      p.style.left = Math.random() * 100 + "vw";
+      p.style.width = p.style.height = (6 + Math.random() * 6) + "px";
+      p.style.background = colors[Math.floor(Math.random() * colors.length)];
+      p.style.borderRadius = Math.random() > 0.5 ? "50%" : "2px";
+      p.style.animationDuration = (2 + Math.random() * 1.5) + "s";
+      document.body.appendChild(p);
+      setTimeout(() => p.remove(), 4000);
+    }
+  }
+  function showCelebration(count, line) {
+    fireConfetti();
+    const overlay = document.createElement("div");
+    overlay.className = "milestoneOverlay show";
+    overlay.innerHTML = `<div class="milestoneCard"><div class="count">${count}</div><div class="line">${line}</div>
+      <div class="sub">${pick(QUOTES)}</div><button type="button">Let's keep going</button></div>`;
+    document.body.appendChild(overlay);
+    const close = () => overlay.remove();
+    overlay.querySelector("button").onclick = close;
+    overlay.onclick = (e) => { if (e.target === overlay) close(); };
+    setTimeout(close, 6000);
+  }
+  function checkMilestone(count) {
+    // Date-scoped (not just per-worker) so "last milestone crossed" resets fresh every day — matches
+    // get_worker_domain_count now being a TODAY-only count, not lifetime. Uses the browser's local date,
+    // close enough to Asia/Kolkata for this purpose (a fun banner, not a billing calculation).
+    const todayKey = new Date().toISOString().slice(0, 10);
+    const key = "milestone_last_" + worker + "_" + todayKey;
+    let last = 0;
+    try { last = Number(localStorage.getItem(key) || 0); } catch (e) {}
+    // Find the highest milestone/50-step crossed since last check.
+    let crossed = null;
+    for (const m of MILESTONES) if (count >= m && last < m) crossed = m;
+    if (count >= 250) { const step = Math.floor(count / 50) * 50; if (last < step) crossed = step; }
+    if (crossed !== null) {
+      const name = worker.replace(/[<>&{}]/g, "") || "You";
+      let line;
+      if (crossed > 200) line = pick(GENERIC_COPY).replace(/{{n}}/g, name).replace(/{{c}}/g, crossed);
+      else line = pick(MILESTONE_COPY[crossed] || MILESTONE_COPY[1]).replace(/{{n}}/g, name);
+      showCelebration(count, line);
+      try { localStorage.setItem(key, String(count)); } catch (e) {}
+    } else {
+      try { localStorage.setItem(key, String(Math.max(last, count))); } catch (e) {}
+    }
+  }
+  async function refreshMilestoneCount(checkForCelebration) {
+    if (!worker) return;
+    try {
+      const { data, error } = await supabaseClient.rpc("get_worker_domain_count", { p_worker: worker });
+      if (error) return;
+      window.__milestoneCount = Number(data || 0);
+      renderBanner();
+      if (checkForCelebration) checkMilestone(window.__milestoneCount);
+    } catch (e) {}
+  }
+  function initMilestones() {
+    window.__milestoneCount = 0;
+    refreshMilestoneCount(true); // also catches a milestone crossed on another device/tab since last visit
+    renderQuote();
+    setInterval(renderBanner, 30000); // re-randomize within the current tier
+    setInterval(renderQuote, 60000); // idle quote refresh
+  }
+
   document.getElementById("domainMode").addEventListener("change", (e) => { domainMode = e.target.value; skippedSeen = []; loadNext(); });
   document.getElementById("emailMode").addEventListener("change", (e) => { emailMode = e.target.value; emailSkippedSeen = []; loadNextEmail(); });
   document.getElementById("bulkMode").addEventListener("change", (e) => { bulkMode = e.target.value; bulkSkippedSeen = []; loadBulkBatch(); });
@@ -1211,6 +1452,7 @@ Rules:
   loadVerifyStats(); // fills the count on the Verifier tab button right away
   loadEmailStats(); // fills the count on the Emails tab button right away
   loadBulkStats(); // fills the count on the Bulk Emails tab button right away
+  initMilestones();
 </script>
 </body>
 </html>
