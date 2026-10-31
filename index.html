@@ -208,7 +208,7 @@
 </head>
 <body>
 <div class="wrap">
-  <h1>LRT Media - Leads Playground</h1>
+  <h1>🎮 LRT Media - Leads Playground</h1>
   <div class="whoami" id="whoami"></div>
   <div class="milestoneBanner" id="milestoneBanner"></div>
   <div class="milestoneQuote" id="milestoneQuote"></div>
@@ -218,14 +218,14 @@
        that project wraps up. -->
   <div style="margin:4px 0 10px;"><a href="amzbees-toys-manual/index.html" target="_blank" rel="noopener" style="font-size:13px;">→ Amz Bees — Toy Sellers (separate, temporary)</a></div>
   <div class="tabs">
-    <button class="tab active" id="tabBtnDomains" type="button">Domains</button>
-    <button class="tab" id="tabBtnVerifier" type="button">Verifier</button>
-    <button class="tab" id="tabBtnEmails" type="button">Emails</button>
-    <button class="tab" id="tabBtnBulkEmails" type="button">Bulk Emails</button>
+    <button class="tab active" id="tabBtnDomains" type="button">🌐 Domains</button>
+    <button class="tab" id="tabBtnVerifier" type="button">✅ Verifier</button>
+    <button class="tab" id="tabBtnEmails" type="button">📧 Emails</button>
+    <button class="tab" id="tabBtnBulkEmails" type="button">📬 Bulk Emails</button>
     <!-- Amazon Bees tab removed 2026-10-17: client discontinued 2026-10-08, data resale program ended. See
          OPEN_ISSUES.md / README.md for the full history if this is ever picked up again. -->
-    <button class="tab" id="tabBtnStats" type="button">Stats</button>
-    <button class="tab" id="tabBtnHealth" type="button">Health</button>
+    <button class="tab" id="tabBtnStats" type="button">📊 Stats</button>
+    <button class="tab" id="tabBtnHealth" type="button">🩺 Health</button>
   </div>
 
   <div id="tab-domains">
@@ -520,10 +520,10 @@
     if (error || !data || !data[0]) return;
     const d = data[0];
     const n = (v) => Number(v).toLocaleString();
-    document.getElementById("tabBtnDomains").textContent = `Domains (${n(d.pending)})`;
+    document.getElementById("tabBtnDomains").textContent = `🌐 Domains (${n(d.pending)})`;
     document.querySelector("#domainMode option[value=queue]").textContent = `Main queue (${n(d.pending)})`;
     document.querySelector("#domainMode option[value=skipped]").textContent = `Skipped for now (${n(d.skipped || 0)})`;
-    document.getElementById("tabBtnStats").textContent = `Stats (${n(d.found)})`; // total domains found so far
+    document.getElementById("tabBtnStats").textContent = `📊 Stats (${n(d.found)})`; // total domains found so far
     // Storage flag: the database is shared with the CRM (500 MB free-plan limit). Warn from 350 MB.
     const bar = document.getElementById("dbbar");
     if (d.db_size_mb !== null && d.db_size_mb !== undefined) {
@@ -581,7 +581,7 @@
     if (error || !data || !data[0]) return;
     const d = data[0];
     const n = (v) => Number(v).toLocaleString();
-    document.getElementById("tabBtnVerifier").textContent = `Verifier (${n(d.pending_verify)})`;
+    document.getElementById("tabBtnVerifier").textContent = `✅ Verifier (${n(d.pending_verify)})`;
     document.getElementById("verifyStats").innerHTML = `
       <div class="stat pending"><div class="num">${n(d.pending_verify)}</div><div class="lbl">Waiting for you</div></div>
       <div class="stat found"><div class="num">${n(d.confirmed_lifetime)}</div><div class="lbl">Confirmed (lifetime)${Number(d.ai_confirmed_lifetime) ? ` — ${n(d.ai_confirmed_lifetime)} Verifier - Auto` : ""}</div></div>
@@ -733,7 +733,7 @@
     if (error || !data || !data[0]) return;
     const d = data[0];
     const n = (v) => Number(v).toLocaleString();
-    document.getElementById("tabBtnEmails").textContent = `Emails (${n(d.in_queue)})`;
+    document.getElementById("tabBtnEmails").textContent = `📧 Emails (${n(d.in_queue)})`;
     document.querySelector("#emailMode option[value=queue]").textContent = `Main queue (${n(d.queue_no_email)})`;
     document.querySelector("#emailMode option[value=verify_failed]").textContent = `Verification failed (${n(d.queue_verify_failed)})`;
     document.querySelector("#emailMode option[value=skipped]").textContent = `Skipped (${n(d.skipped || 0)})`;
@@ -961,7 +961,7 @@ Rules:
     if (error || !data || !data[0]) return;
     const d = data[0];
     const n = (v) => Number(v).toLocaleString();
-    document.getElementById("tabBtnBulkEmails").textContent = `Bulk Emails (${n(d.queue_no_email)})`;
+    document.getElementById("tabBtnBulkEmails").textContent = `📬 Bulk Emails (${n(d.queue_no_email)})`;
     document.querySelector("#bulkMode option[value=queue]").textContent = `Main queue (${n(d.queue_no_email)})`;
     document.querySelector("#bulkMode option[value=skipped]").textContent = `Skipped for now (${n(d.skipped || 0)})`;
     document.getElementById("bulkStats").innerHTML = `
