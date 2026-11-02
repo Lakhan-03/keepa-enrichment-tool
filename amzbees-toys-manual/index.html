@@ -446,8 +446,11 @@
         status.textContent = error.message.includes("already_handled") ? "Someone else already handled this one." : error.message;
         status.className = "status error"; saveBtn.disabled = false; return;
       }
-      enrichedCount++;
-      loadNext();
+      // Insert-only — deliberately does NOT advance to the next seller (2026-11-03, explicit user
+      // call: this box and the phone box are both "just insert," the page should only change via
+      // the right column's Skip/Reject/Confirm decision buttons).
+      status.textContent = `Saved ${emails.length} email(s).`; status.className = "status";
+      input.value = ""; saveBtn.disabled = false;
     });
     wirePhoneBox(s.seller_id);
     document.getElementById("counter").textContent = `${enrichedCount} handled this session`;
