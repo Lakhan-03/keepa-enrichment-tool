@@ -244,6 +244,7 @@
     content.innerHTML = `
       <div class="lead-grid"><div class="lead-info">
       ${fieldsHtml(s)}
+      ${phoneBoxHtml()}
       </div>
       <div class="lead-actions">
       <div class="input-row">
@@ -288,6 +289,7 @@
       loadNext();
     });
     input.focus();
+    wirePhoneBox(s.seller_id);
     document.getElementById("counter").textContent = `${enrichedCount} handled this session`;
   }
 
