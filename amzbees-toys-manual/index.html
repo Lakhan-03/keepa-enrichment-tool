@@ -356,6 +356,13 @@
       <div class="field"><span class="field-label">Business</span><span class="val">${esc(s.business_name || "n/a")}</span></div>
       ${s.job_title ? `<div class="field"><span class="field-label">Title found with it</span><span class="val">${esc(s.job_title)}</span></div>` : ""}
       <div class="field"><span class="field-label">Why it needs a human look</span><span class="val">${esc(s.elv_status || "unverified")}</span></div>
+      <div style="margin-top:28px;padding-top:20px;border-top:1px solid var(--border);">
+        <div style="font-size:13px;color:var(--muted);margin-bottom:4px">Found a different, NEW email while you were checking the site? Paste it below — it still goes through full automated verification, same as always.</div>
+        <textarea id="emailInput" placeholder="Paste one or more NEW emails — one per line, or separated by commas" style="min-height:140px;"></textarea>
+        <div class="actions-row" style="margin-top:12px;">
+          <button id="saveBtn" style="background: var(--accent); color: white;">Save new email(s)</button>
+        </div>
+      </div>
       </div>
       <div class="lead-actions">
       <div class="field" style="background:#eff6ff;border:1px solid #bfdbfe;border-radius:10px;padding:14px;">
@@ -367,11 +374,6 @@
         <button id="skipBtn" type="button">Skip for now</button>
         <button id="rejectBtn" type="button">✗ Not real / can't confirm</button>
         <button id="confirmBtn" type="button">✓ I see it on the site</button>
-      </div>
-      <div style="font-size:13px;color:var(--muted);margin:14px 0 4px">Found a different, NEW email while you were checking the site? Paste it below — it still goes through full automated verification, same as always.</div>
-      <textarea id="emailInput" placeholder="Paste one or more NEW emails — one per line, or separated by commas"></textarea>
-      <div class="actions-row">
-        <button id="saveBtn" style="background: var(--accent); color: white;">Save new email(s)</button>
       </div>
       </div></div>
     `;
