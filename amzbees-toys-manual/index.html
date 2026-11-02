@@ -301,27 +301,26 @@
       <div class="field"><span class="field-label">Find founder email</span><a href="https://www.google.com/search?q=${encodeURIComponent((s.domain || "") + " founder email")}" target="_blank" rel="noopener">Google search</a></div>
       </div>
       <div class="lead-actions">
-      <div class="input-row">
-        <input type="text" id="emailInput" placeholder="Paste email address here" autocomplete="off" />
-        <button id="saveBtn">Save</button>
-      </div>
+      <textarea id="emailInput" placeholder="Paste one or more emails — one per line, or separated by commas"></textarea>
       <div class="status" id="status"></div>
       <div class="actions-row">
         <button id="skipBtn" type="button">Skip for now</button>
         <button id="notFoundBtn" type="button">Couldn't find any</button>
+        <button id="saveBtn" style="background: var(--accent); color: white;">Save</button>
       </div>
       </div></div>
     `;
     const input = document.getElementById("emailInput");
     const status = document.getElementById("status");
     const saveBtn = document.getElementById("saveBtn");
-    input.addEventListener("keydown", (e) => { if (e.key === "Enter") saveBtn.click(); });
     saveBtn.addEventListener("click", async () => {
-      const email = input.value.trim();
-      if (!email) { status.textContent = "Enter an email first."; status.className = "status error"; return; }
+      // A seller's site can genuinely have more than one real contact email — accept a whole paste,
+      // same split/dedupe rule the general pipeline's own manual-feed box uses.
+      const emails = [...new Set(input.value.split(/[\s,;]+/).map((e) => e.trim().toLowerCase()).filter((e) => e.includes("@")))];
+      if (!emails.length) { status.textContent = "Enter at least one email first."; status.className = "status error"; return; }
       saveBtn.disabled = true;
       status.textContent = "Saving…"; status.className = "status";
-      const { error } = await supabaseClient.rpc("submit_amzbees_toys_email", { p_seller_id: current.seller_id, p_email: email, p_worker: worker });
+      const { error } = await supabaseClient.rpc("submit_amzbees_toys_emails", { p_seller_id: current.seller_id, p_emails: emails, p_worker: worker });
       if (error) {
         status.textContent = error.message.includes("already_handled") ? "Someone else already handled this one." : error.message;
         status.className = "status error"; saveBtn.disabled = false; return;
@@ -367,6 +366,11 @@
         <button id="rejectBtn" type="button">✗ Not real / can't confirm</button>
         <button id="confirmBtn" type="button">✓ I see it on the site</button>
       </div>
+      <div style="font-size:13px;color:var(--muted);margin:14px 0 4px">Found a different, NEW email while you were checking the site? Paste it below — it still goes through full automated verification, same as always.</div>
+      <textarea id="emailInput" placeholder="Paste one or more NEW emails — one per line, or separated by commas"></textarea>
+      <div class="actions-row">
+        <button id="saveBtn" style="background: var(--accent); color: white;">Save new email(s)</button>
+      </div>
       </div></div>
     `;
     const status = document.getElementById("status");
@@ -387,6 +391,21 @@
     document.getElementById("skipBtn").addEventListener("click", async () => {
       await supabaseClient.rpc("release_amzbees_toys_email_lead", { p_seller_id: current.seller_id });
       seen.push(current.seller_id);
+      loadNext();
+    });
+    document.getElementById("saveBtn").addEventListener("click", async () => {
+      const input = document.getElementById("emailInput");
+      const emails = [...new Set(input.value.split(/[\s,;]+/).map((e) => e.trim().toLowerCase()).filter((e) => e.includes("@")))];
+      if (!emails.length) { status.textContent = "Enter at least one email first."; status.className = "status error"; return; }
+      const saveBtn = document.getElementById("saveBtn");
+      saveBtn.disabled = true;
+      status.textContent = "Saving…"; status.className = "status";
+      const { error } = await supabaseClient.rpc("submit_amzbees_toys_emails", { p_seller_id: current.seller_id, p_emails: emails, p_worker: worker });
+      if (error) {
+        status.textContent = error.message.includes("already_handled") ? "Someone else already handled this one." : error.message;
+        status.className = "status error"; saveBtn.disabled = false; return;
+      }
+      enrichedCount++;
       loadNext();
     });
     document.getElementById("counter").textContent = `${enrichedCount} handled this session`;
