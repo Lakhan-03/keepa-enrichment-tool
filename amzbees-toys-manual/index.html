@@ -291,6 +291,42 @@
     document.getElementById("counter").textContent = `${enrichedCount} handled this session`;
   }
 
+  // Manual phone-number capture (added 2026-11-03) — some sellers have a business phone number
+  // listed on a third-party site (Walmart Business, BBB.org) even when no email turns up. Plain
+  // capture, not a verified "contact" — no claim-locking, no funnel state change, just storage.
+  function phoneBoxHtml() {
+    return `
+      <div style="margin-top:20px;padding-top:16px;border-top:1px solid var(--border);">
+        <div class="field-label" style="margin-bottom:6px;">Found a phone number elsewhere? (Walmart Business, BBB.org, etc.)</div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;">
+          <select id="phoneSource" style="padding:8px 10px;border:1px solid var(--border);border-radius:8px;font-size:13px;background:var(--card);color:var(--text);">
+            <option value="walmart_business">Walmart Business</option>
+            <option value="bbb">BBB.org</option>
+            <option value="other">Other</option>
+          </select>
+          <input type="text" id="phoneNumberInput" placeholder="Phone number" style="flex:1;min-width:140px;padding:8px 10px;border:1px solid var(--border);border-radius:8px;font-size:13px;background:var(--card);color:var(--text);" />
+          <button id="savePhoneBtn" type="button" style="padding:8px 14px;">Save phone</button>
+        </div>
+        <div class="status" id="phoneStatus" style="margin-top:6px;"></div>
+      </div>
+    `;
+  }
+  function wirePhoneBox(sellerId) {
+    const savePhoneBtn = document.getElementById("savePhoneBtn");
+    const phoneStatus = document.getElementById("phoneStatus");
+    savePhoneBtn.addEventListener("click", async () => {
+      const phone = document.getElementById("phoneNumberInput").value.trim();
+      const source = document.getElementById("phoneSource").value;
+      if (!phone) { phoneStatus.textContent = "Enter a phone number first."; phoneStatus.className = "status error"; return; }
+      savePhoneBtn.disabled = true;
+      phoneStatus.textContent = "Saving…"; phoneStatus.className = "status";
+      const { error } = await supabaseClient.rpc("submit_amzbees_toys_phone", { p_seller_id: sellerId, p_phone: phone, p_source: source, p_worker: worker });
+      if (error) { phoneStatus.textContent = error.message; phoneStatus.className = "status error"; savePhoneBtn.disabled = false; return; }
+      phoneStatus.textContent = "Saved."; phoneStatus.className = "status";
+      savePhoneBtn.disabled = false;
+    });
+  }
+
   function renderNeedEmail(s) {
     current = s;
     content.innerHTML = `
@@ -301,6 +337,7 @@
       <div class="field"><span class="field-label">Business</span><span class="val">${esc(s.business_name || "n/a")}</span></div>
       <div class="field"><span class="field-label">Brand</span><span class="val">${esc(s.top_product_brand || "n/a")}</span></div>
       <div class="field"><span class="field-label">Find founder email</span><a href="https://www.google.com/search?q=${encodeURIComponent((s.domain || "") + " founder email")}" target="_blank" rel="noopener">Google search</a></div>
+      ${phoneBoxHtml()}
       </div>
       <div class="lead-actions">
       <textarea id="emailInput" placeholder="Paste one or more emails — one per line, or separated by commas"></textarea>
@@ -342,6 +379,7 @@
       loadNext();
     });
     input.focus();
+    wirePhoneBox(s.seller_id);
     document.getElementById("counter").textContent = `${enrichedCount} handled this session`;
   }
 
@@ -363,6 +401,7 @@
           <button id="saveBtn" style="background: var(--accent); color: white;">Save new email(s)</button>
         </div>
       </div>
+      ${phoneBoxHtml()}
       </div>
       <div class="lead-actions">
       <div class="field" style="background:#eff6ff;border:1px solid #bfdbfe;border-radius:10px;padding:14px;">
@@ -412,6 +451,7 @@
       enrichedCount++;
       loadNext();
     });
+    wirePhoneBox(s.seller_id);
     document.getElementById("counter").textContent = `${enrichedCount} handled this session`;
   }
 
