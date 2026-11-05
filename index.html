@@ -1168,7 +1168,7 @@ Rules:
   }
   async function loadStats2() {
     const box = document.getElementById("statsContent");
-    const [dres, sres, ires, wres, kres, eres] = await Promise.all([supabaseClient.rpc("get_daily_stats", { p_days: 30 }), supabaseClient.rpc("get_enrichment_stats"), supabaseClient.rpc("get_daily_icp", { p_days: 30 }), supabaseClient.rpc("get_sweep_status"), supabaseClient.rpc("get_daily_skips", { p_days: 30 }), supabaseClient.rpc("get_email_worker_stats", { p_days: 30 })]);
+    const [dres, sres, ires, wres, kres, eres, leres] = await Promise.all([supabaseClient.rpc("get_daily_stats", { p_days: 30 }), supabaseClient.rpc("get_enrichment_stats"), supabaseClient.rpc("get_daily_icp", { p_days: 30 }), supabaseClient.rpc("get_sweep_status"), supabaseClient.rpc("get_daily_skips", { p_days: 30 }), supabaseClient.rpc("get_email_worker_stats", { p_days: 30 }), supabaseClient.rpc("get_email_worker_log", { p_worker: "Sandeep", p_days: 90 })]);
     if (dres.error) { box.innerHTML = `<div class="empty-state">Could not load: ${esc(dres.error.message)}</div>`; return; }
     const rows = dres.data || [];
     const totals = (sres.data && sres.data[0]) || {};
@@ -1221,6 +1221,16 @@ Rules:
       const em = emailByDay[d] || {};
       return `<tr class="${d === today ? "today" : ""}"><td>${nice}${d === today ? " (today)" : ""}</td><td class="g1 gs">${ic ? ic.sellers : "-"}</td><td class="g1">${ic ? ic.icp : "-"}</td><td class="g1">${ic && ic.sellers ? Math.round((100 * ic.icp) / ic.sellers) + "%" : "-"}</td><td class="g1">${domPct}</td><td class="g2 gs">${r.found}</td>${names.map((n, i) => `<td class="g2">${r.by[n] || 0}</td>`).join("")}<td class="g2">${r.notFound}</td><td class="g2">${skipDay[d] || 0}</td>${emailNames.map((n) => `<td class="g3">${em[n] || 0}</td>`).join("")}<td>${dl}</td></tr>`;
     }).join("");
+    // Email log (added 2026-11-05): the actual list of domains behind the "(Emails)" column above, not just a
+    // count — user's ask: "log of domains Sandeep enriched either by adding emails or verifying it". Only ever
+    // real, attributed rows (added_by/confirmed_by actually set) — nothing pre-fix/pre-Oct-21 shows here, by
+    // design, same as the table column (no backfill, no assumption, per explicit user call).
+    const logRows = leres.data || [];
+    const logRowsHtml = logRows.map((r) => {
+      const when = new Date(r.last_action_at).toLocaleString("en-GB", { timeZone: "Asia/Kolkata", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" });
+      const emails = [r.emails_added, r.emails_verified].filter(Boolean).join(" / ");
+      return `<tr><td>${esc(r.domain || "")}</td><td>${esc(r.company_name || "")}</td><td>${esc(r.action)}</td><td>${esc(emails)}</td><td>${when} IST</td></tr>`;
+    }).join("");
     box.innerHTML = `
       <div class="bigstats">
         ${card(Number(totals.found || 0).toLocaleString(), "Domains found — overall", `<div class="delta flat">${Number(totals.pending || 0).toLocaleString()} waiting · ${Number(totals.skipped || 0).toLocaleString()} skipped</div>`, false)}
@@ -1228,7 +1238,11 @@ Rules:
         ${personCards}
       </div>
       <table class="days"><tr><th>Day</th><th class="g1 gs">Scanned</th><th class="g1">ICP</th><th class="g1">ICP %</th><th class="g1">Domain %</th><th class="g2 gs">Found</th>${names.map((n, i) => `<th class="g2">${esc(shortLabel(n))}</th>`).join("")}<th class="g2">Not found</th><th class="g2">Skipped</th>${emailNames.map((n) => `<th class="g3">${esc(n)} (Emails)</th>`).join("")}<th>vs previous day</th></tr>${rowsHtml || `<tr><td colspan="11">No data yet</td></tr>`}</table>
-      <p class="counter" style="margin-top:10px">Scanned = sellers the sweep looked at; ICP = those that fit; Domain % = found ÷ (found + not found) that day. Found = a website was saved. Skipped = leads put in the Skip-for-now bucket that day (they stay there until you pick them from the dropdown). Days follow India time. "So far" figures for today grow through the day. Entries saved before names were tracked (before 25 Sep) are counted under Tushar. "X (Emails)" = domains (not emails) where that person found/added or manually confirmed an email that day, from the Emails/Bulk Emails tabs — a domain with several emails saved the same day still counts once; only shown for whoever is actively working emails.</p>`;
+      <p class="counter" style="margin-top:10px">Scanned = sellers the sweep looked at; ICP = those that fit; Domain % = found ÷ (found + not found) that day. Found = a website was saved. Skipped = leads put in the Skip-for-now bucket that day (they stay there until you pick them from the dropdown). Days follow India time. "So far" figures for today grow through the day. Entries saved before names were tracked (before 25 Sep) are counted under Tushar. "X (Emails)" = domains (not emails) where that person found/added or manually confirmed an email that day, from the Emails/Bulk Emails tabs — a domain with several emails saved the same day still counts once; only shown for whoever is actively working emails.</p>
+      <details style="margin-top:16px">
+        <summary style="cursor:pointer;font-weight:600;color:var(--muted);font-size:13px">Sandeep's email log — ${logRows.length} domain${logRows.length === 1 ? "" : "s"} (last 90 days, click to expand)</summary>
+        <table class="days" style="margin-top:10px"><tr><th>Domain</th><th>Company</th><th>Action</th><th>Email(s)</th><th>When</th></tr>${logRowsHtml || `<tr><td colspan="5">Nothing yet.</td></tr>`}</table>
+      </details>`;
   }
   setInterval(() => { if (!document.getElementById("tab-stats").hidden) loadStats2(); }, 2 * 60 * 1000);
 
