@@ -213,12 +213,13 @@
      them, compared as a one-way hash. See boot()/showGate() in the script below. -->
 <div id="accessGate" class="modal-overlay" style="display:none;">
   <div class="modal" style="max-width:360px;">
-    <h3>🔒 Team access</h3>
-    <p>Enter your personal access code to continue.</p>
+    <h3 id="accessGateTitle">🔒 Team access</h3>
+    <p id="accessGateSubtitle">Enter your personal access code to continue.</p>
     <input type="text" id="accessNameInput" placeholder="Your name" autocomplete="off" style="width:100%;padding:10px 12px;border:1px solid var(--border);border-radius:8px;font-size:14px;margin-bottom:8px;" />
     <input type="password" id="accessCodeInput" placeholder="Your password" autocomplete="off" style="width:100%;padding:10px 12px;border:1px solid var(--border);border-radius:8px;font-size:14px;margin-bottom:10px;" />
     <div id="accessGateError" style="color:#dc2626;font-size:13px;min-height:18px;margin-bottom:6px;"></div>
     <button id="accessGateBtn" type="button" style="width:100%;background:var(--accent);color:#fff;padding:12px;">Continue</button>
+    <button id="accessGateCancelBtn" type="button" style="width:100%;background:transparent;color:var(--muted);padding:8px;margin-top:6px;display:none;">Cancel</button>
   </div>
 </div>
 <div class="wrap">
@@ -380,9 +381,13 @@
   function showWho() {
     const el = document.getElementById("whoami");
     el.innerHTML = `Working as <b>${worker.replace(/[<>&]/g, "")}</b> · <a id="changeName">change</a>`;
-    document.getElementById("changeName").onclick = () => { askName(true); showWho(); loadNext(); };
+    // Fixed 2026-11-06 (real gap found): this used to call askName(true), a free-text prompt with no
+    // password check — anyone already past the gate could rename themselves to anyone else with zero
+    // verification, polluting Stats/attribution. Now reuses the real password gate (startIdentityChange,
+    // defined near the gate logic below) — switching who you are requires that person's actual password.
+    document.getElementById("changeName").onclick = () => { startIdentityChange(); };
   }
-  // askName(false) moved into boot() below — must not run until the access gate passes.
+  // askName() itself is kept only as a fallback helper, no longer called anywhere in the normal flow.
 
   const content = document.getElementById("content");
   const counter = document.getElementById("counter");
@@ -1521,15 +1526,29 @@ Rules:
     setInterval(() => { if (!document.getElementById("tab-stats").hidden) loadStats2(); }, 2 * 60 * 1000);
   }
 
+  // gateMode: 'login' (first entry, nothing loaded yet, no way to cancel out of it) vs 'change' (already
+  // in, switching who's using this browser — Cancel just closes the gate and keeps the current identity).
+  let gateMode = "login";
   function showGate(errorMsg) {
     document.getElementById("accessGate").style.display = "flex";
     document.getElementById("accessGateError").textContent = errorMsg || "";
+    document.getElementById("accessGateTitle").textContent = gateMode === "change" ? "🔒 Switch who you are" : "🔒 Team access";
+    document.getElementById("accessGateSubtitle").textContent = gateMode === "change"
+      ? "Enter the name and password of the person who should be working next."
+      : "Enter your personal access code to continue.";
+    document.getElementById("accessGateCancelBtn").style.display = gateMode === "change" ? "block" : "none";
     const nameInput = document.getElementById("accessNameInput");
     const codeInput = document.getElementById("accessCodeInput");
-    if (!nameInput.value) nameInput.focus(); else codeInput.focus();
+    nameInput.value = "";
+    codeInput.value = "";
+    nameInput.focus();
   }
   function hideGate() {
     document.getElementById("accessGate").style.display = "none";
+  }
+  function startIdentityChange() {
+    gateMode = "change";
+    showGate();
   }
   async function tryAccessCode() {
     const btn = document.getElementById("accessGateBtn");
@@ -1544,13 +1563,15 @@ Rules:
       showGate("Wrong name/password, or too many tries — wait a bit and try again.");
       return;
     }
-    worker = row.display_name; // sets the worker identity straight from the verified login, same as askName used to
+    worker = row.display_name; // sets the worker identity straight from the verified login
     try { localStorage.setItem("worker_name", worker); } catch (e) {}
     try { localStorage.setItem(ACCESS_KEY, "1"); } catch (e) {}
     hideGate();
-    boot();
+    if (gateMode === "change") { showWho(); loadNext(); } else { boot(); }
+    gateMode = "login";
   }
   document.getElementById("accessGateBtn").addEventListener("click", tryAccessCode);
+  document.getElementById("accessGateCancelBtn").addEventListener("click", () => { hideGate(); gateMode = "login"; });
   document.getElementById("accessCodeInput").addEventListener("keydown", (e) => { if (e.key === "Enter") tryAccessCode(); });
   document.getElementById("accessNameInput").addEventListener("keydown", (e) => { if (e.key === "Enter") document.getElementById("accessCodeInput").focus(); });
 
