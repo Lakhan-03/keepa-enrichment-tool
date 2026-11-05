@@ -208,6 +208,19 @@
 </style>
 </head>
 <body>
+<!-- Access gate, added 2026-11-06: nothing below this ever loads/fetches until a correct password is
+     entered. The real passwords are never in this file -- only check_access_code() in the database knows
+     them, compared as a one-way hash. See boot()/showGate() in the script below. -->
+<div id="accessGate" class="modal-overlay" style="display:none;">
+  <div class="modal" style="max-width:360px;">
+    <h3>🔒 Team access</h3>
+    <p>Enter your personal access code to continue.</p>
+    <input type="text" id="accessNameInput" placeholder="Your name" autocomplete="off" style="width:100%;padding:10px 12px;border:1px solid var(--border);border-radius:8px;font-size:14px;margin-bottom:8px;" />
+    <input type="password" id="accessCodeInput" placeholder="Your password" autocomplete="off" style="width:100%;padding:10px 12px;border:1px solid var(--border);border-radius:8px;font-size:14px;margin-bottom:10px;" />
+    <div id="accessGateError" style="color:#dc2626;font-size:13px;min-height:18px;margin-bottom:6px;"></div>
+    <button id="accessGateBtn" type="button" style="width:100%;background:var(--accent);color:#fff;padding:12px;">Continue</button>
+  </div>
+</div>
 <div class="wrap">
   <h1>🎮 LRT Media - Leads Playground</h1>
   <div class="whoami" id="whoami"></div>
@@ -369,7 +382,7 @@
     el.innerHTML = `Working as <b>${worker.replace(/[<>&]/g, "")}</b> · <a id="changeName">change</a>`;
     document.getElementById("changeName").onclick = () => { askName(true); showWho(); loadNext(); };
   }
-  askName(false);
+  // askName(false) moved into boot() below — must not run until the access gate passes.
 
   const content = document.getElementById("content");
   const counter = document.getElementById("counter");
@@ -1140,8 +1153,7 @@ Rules:
       <table class="found"><tr><th>Latest numbers</th><th></th></tr>${factRows}</table>
       <table class="found" style="margin-top:14px"><tr><th>History (latest 24 audits)</th><th></th></tr>${hist}</table>`;
   }
-  loadHealth();
-  setInterval(() => { loadHealth(); if (!document.getElementById("tab-health").hidden) loadHealthTab(); }, 5 * 60 * 1000);
+  // loadHealth() + its interval moved into boot() below — must not run until the access gate passes.
 
   // Yes/No pop-up in the middle of the screen before a lead is marked "not found" (unlike Skip, it never comes back). Esc or "No" cancels; "No" is focused by default.
   function confirmClick(btn, doIt) {
@@ -1251,7 +1263,7 @@ Rules:
         <table class="days" style="margin-top:10px"><tr><th>Domain</th><th>Company</th><th>Action</th><th>Email(s)</th><th>When</th></tr>${logRowsHtml || `<tr><td colspan="5">Nothing yet.</td></tr>`}</table>
       </details>`;
   }
-  setInterval(() => { if (!document.getElementById("tab-stats").hidden) loadStats2(); }, 2 * 60 * 1000);
+  // this setInterval moved into boot() below — must not run until the access gate passes.
 
   // Copy buttons: a small icon next to every value box copies just that text (no label). Added automatically whenever a card is drawn.
   async function copyText(t) {
@@ -1490,12 +1502,61 @@ Rules:
   document.getElementById("domainMode").addEventListener("change", (e) => { domainMode = e.target.value; skippedSeen = []; loadNext(); });
   document.getElementById("emailMode").addEventListener("change", (e) => { emailMode = e.target.value; emailSkippedSeen = []; loadNextEmail(); });
   document.getElementById("bulkMode").addEventListener("change", (e) => { bulkMode = e.target.value; bulkSkippedSeen = []; loadBulkBatch(); });
-  showWho();
-  loadNext();
-  loadVerifyStats(); // fills the count on the Verifier tab button right away
-  loadEmailStats(); // fills the count on the Emails tab button right away
-  loadBulkStats(); // fills the count on the Bulk Emails tab button right away
-  initMilestones();
+
+  // ================= Access gate =================
+  // Everything that actually fetches/shows real data (leads, stats, the email log, health) lives inside
+  // boot() and never runs until check_access_code() (a real database check, password never stored in this
+  // file) returns ok. Passing the gate once saves a flag in this browser so it isn't asked again here.
+  const ACCESS_KEY = "app_access_ok_v1";
+
+  function boot() {
+    showWho();
+    loadNext();
+    loadVerifyStats(); // fills the count on the Verifier tab button right away
+    loadEmailStats(); // fills the count on the Emails tab button right away
+    loadBulkStats(); // fills the count on the Bulk Emails tab button right away
+    initMilestones();
+    loadHealth();
+    setInterval(() => { loadHealth(); if (!document.getElementById("tab-health").hidden) loadHealthTab(); }, 5 * 60 * 1000);
+    setInterval(() => { if (!document.getElementById("tab-stats").hidden) loadStats2(); }, 2 * 60 * 1000);
+  }
+
+  function showGate(errorMsg) {
+    document.getElementById("accessGate").style.display = "flex";
+    document.getElementById("accessGateError").textContent = errorMsg || "";
+    const nameInput = document.getElementById("accessNameInput");
+    const codeInput = document.getElementById("accessCodeInput");
+    if (!nameInput.value) nameInput.focus(); else codeInput.focus();
+  }
+  function hideGate() {
+    document.getElementById("accessGate").style.display = "none";
+  }
+  async function tryAccessCode() {
+    const btn = document.getElementById("accessGateBtn");
+    const name = document.getElementById("accessNameInput").value.trim();
+    const code = document.getElementById("accessCodeInput").value;
+    if (!name || !code) { showGate("Enter both your name and your password."); return; }
+    btn.disabled = true;
+    const { data, error } = await supabaseClient.rpc("check_access_code", { p_name: name, p_code: code });
+    btn.disabled = false;
+    const row = data && data[0];
+    if (error || !row || !row.ok) {
+      showGate("Wrong name/password, or too many tries — wait a bit and try again.");
+      return;
+    }
+    worker = row.display_name; // sets the worker identity straight from the verified login, same as askName used to
+    try { localStorage.setItem("worker_name", worker); } catch (e) {}
+    try { localStorage.setItem(ACCESS_KEY, "1"); } catch (e) {}
+    hideGate();
+    boot();
+  }
+  document.getElementById("accessGateBtn").addEventListener("click", tryAccessCode);
+  document.getElementById("accessCodeInput").addEventListener("keydown", (e) => { if (e.key === "Enter") tryAccessCode(); });
+  document.getElementById("accessNameInput").addEventListener("keydown", (e) => { if (e.key === "Enter") document.getElementById("accessCodeInput").focus(); });
+
+  let alreadyPassedGate = false;
+  try { alreadyPassedGate = localStorage.getItem(ACCESS_KEY) === "1" && !!worker; } catch (e) {}
+  if (alreadyPassedGate) { boot(); } else { showGate(); }
 </script>
 </body>
 </html>
