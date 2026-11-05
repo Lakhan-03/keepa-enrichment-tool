@@ -500,7 +500,8 @@
       loadNext();
     });
 
-    confirmClick(notFoundBtn, async () => {
+    notFoundBtn.addEventListener("click", async () => {
+      // Confirmation prompt removed 2026-11-05 (user request) — was wrapped in confirmClick()'s "are you sure" modal.
       notFoundBtn.disabled = true;
       const { error } = await supabaseClient.rpc("mark_seller_domain_not_found", {
         p_seller_id: current.seller_id,
