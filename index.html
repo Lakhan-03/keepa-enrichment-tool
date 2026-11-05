@@ -819,7 +819,7 @@
       // New emails typed below — unchanged, still full automated verification.
       let saved = 0, words = [];
       if (emails.length) {
-        const { data, error } = await supabaseClient.rpc("submit_manual_emails", { p_company_id: emailCurrent.company_id, p_emails: emails });
+        const { data, error } = await supabaseClient.rpc("submit_manual_emails", { p_company_id: emailCurrent.company_id, p_emails: emails, p_worker: worker });
         if (error && /not waiting for emails/.test(error.message) && !confirmed) { emailNotice = "That lead was just finished by someone else — here's the next one."; loadNextEmail(); return; }
         if (error && !confirmed) { status.textContent = error.message; status.className = "status error"; saveBtn.disabled = false; return; }
         if (data) {
@@ -1063,7 +1063,7 @@ Rules:
         else { await supabaseClient.rpc("skip_email_lead_for_now", { p_company_id: row.company_id, p_worker: worker }); lines.push({ domain: row.domain, msg: "moved to Skipped for now" }); }
         continue;
       }
-      const { data, error } = await supabaseClient.rpc("submit_manual_emails", { p_company_id: row.company_id, p_emails: emails });
+      const { data, error } = await supabaseClient.rpc("submit_manual_emails", { p_company_id: row.company_id, p_emails: emails, p_worker: worker });
       if (error) { await supabaseClient.rpc("release_email_lead", { p_company_id: row.company_id }); lines.push({ domain: row.domain, msg: "ERROR: " + error.message }); continue; }
       const dups = (data && data.duplicates) || [];
       lines.push({ domain: row.domain, msg: `saved ${data.saved} email(s)${dups.length ? ` (${dups.length} already seen before, skipped)` : ""}` });
@@ -1167,7 +1167,7 @@ Rules:
   }
   async function loadStats2() {
     const box = document.getElementById("statsContent");
-    const [dres, sres, ires, wres, kres] = await Promise.all([supabaseClient.rpc("get_daily_stats", { p_days: 30 }), supabaseClient.rpc("get_enrichment_stats"), supabaseClient.rpc("get_daily_icp", { p_days: 30 }), supabaseClient.rpc("get_sweep_status"), supabaseClient.rpc("get_daily_skips", { p_days: 30 })]);
+    const [dres, sres, ires, wres, kres, eres] = await Promise.all([supabaseClient.rpc("get_daily_stats", { p_days: 30 }), supabaseClient.rpc("get_enrichment_stats"), supabaseClient.rpc("get_daily_icp", { p_days: 30 }), supabaseClient.rpc("get_sweep_status"), supabaseClient.rpc("get_daily_skips", { p_days: 30 }), supabaseClient.rpc("get_email_worker_stats", { p_days: 30 })]);
     if (dres.error) { box.innerHTML = `<div class="empty-state">Could not load: ${esc(dres.error.message)}</div>`; return; }
     const rows = dres.data || [];
     const totals = (sres.data && sres.data[0]) || {};
@@ -1184,6 +1184,14 @@ Rules:
     (ires.data || []).forEach((r) => { icpDay[r.day] = { sellers: Number(r.sellers), icp: Number(r.icp) }; if (!byDay[r.day]) byDay[r.day] = { found: 0, notFound: 0, by: {} }; });
     const skipDay = {};
     (kres.data || []).forEach((r) => { skipDay[r.day] = (skipDay[r.day] || 0) + Number(r.skipped); if (!byDay[r.day]) byDay[r.day] = { found: 0, notFound: 0, by: {} }; });
+    // Email-finding metric (added 2026-11-05): domains (not emails) where a human found/added or verified an
+    // email that day, per worker — tracks email-finding productivity the same way personCards already tracks
+    // domain-finding productivity. A domain with several emails saved the same day by the same person still
+    // counts once (get_email_worker_stats already dedupes by company_id per day server-side).
+    const emailByDay = {};
+    const emailPeople = new Set();
+    (eres.data || []).forEach((r) => { (emailByDay[r.day] = emailByDay[r.day] || {})[r.worker] = Number(r.domains); emailPeople.add(r.worker); });
+    const emailNames = [...emailPeople].sort();
     const names = [...people].sort();
     const today = istDay(new Date());
     const days = Object.keys(byDay).sort().reverse();
@@ -1197,6 +1205,12 @@ Rules:
     const y = yKey ? byDay[yKey] : null;
     const card = (num, lbl, extra, hl) => `<div class="bigstat ${hl ? "hl" : ""}"><div class="num">${num}</div><div class="lbl">${lbl}</div>${extra || ""}</div>`;
     const personCards = names.map((n) => card(t.by[n] || 0, `Today — ${esc(n)}`, deltaHtml(t.by[n] || 0, y ? (y.by[n] || 0) : null, "yesterday"), false)).join("");
+    // Email cards use their own day keys (email activity doesn't always line up with a domain-finding day).
+    const emailDays = Object.keys(emailByDay).sort().reverse();
+    const te = emailByDay[today] || {};
+    const yEmailKey = emailDays.find((d) => d < today);
+    const ye = yEmailKey ? emailByDay[yEmailKey] : null;
+    const emailPersonCards = emailNames.map((n) => card(te[n] || 0, `Today — ${esc(n)} (Emails)`, deltaHtml(te[n] || 0, ye ? (ye[n] || 0) : null, "yesterday"), false)).join("");
     const rowsHtml = days.map((d) => {
       const r = byDay[d];
       const idx = days.indexOf(d);
@@ -1213,9 +1227,10 @@ Rules:
         ${card(Number(totals.found || 0).toLocaleString(), "Domains found — overall", `<div class="delta flat">${Number(totals.pending || 0).toLocaleString()} waiting · ${Number(totals.skipped || 0).toLocaleString()} skipped</div>`, false)}
         ${card(t.found, "Domains found today", deltaHtml(t.found, y ? y.found : null, "yesterday"), true)}
         ${personCards}
+        ${emailPersonCards}
       </div>
       <table class="days"><tr><th>Day</th><th class="g1 gs">Scanned</th><th class="g1">ICP</th><th class="g1">ICP %</th><th class="g1">Domain %</th><th class="g2 gs">Found</th>${names.map((n, i) => `<th class="g2">${esc(shortLabel(n))}</th>`).join("")}<th class="g2">Not found</th><th class="g2">Skipped</th><th>vs previous day</th></tr>${rowsHtml || `<tr><td colspan="11">No data yet</td></tr>`}</table>
-      <p class="counter" style="margin-top:10px">Scanned = sellers the sweep looked at; ICP = those that fit; Domain % = found ÷ (found + not found) that day. Found = a website was saved. Skipped = leads put in the Skip-for-now bucket that day (they stay there until you pick them from the dropdown). Days follow India time. "So far" figures for today grow through the day. Entries saved before names were tracked (before 25 Sep) are counted under Tushar.</p>`;
+      <p class="counter" style="margin-top:10px">Scanned = sellers the sweep looked at; ICP = those that fit; Domain % = found ÷ (found + not found) that day. Found = a website was saved. Skipped = leads put in the Skip-for-now bucket that day (they stay there until you pick them from the dropdown). Days follow India time. "So far" figures for today grow through the day. Entries saved before names were tracked (before 25 Sep) are counted under Tushar. "(Emails)" cards = domains (not emails) where that person found/added or manually confirmed an email that day, from the Emails/Bulk Emails tabs — a domain with several emails saved the same day still counts once.</p>`;
   }
   setInterval(() => { if (!document.getElementById("tab-stats").hidden) loadStats2(); }, 2 * 60 * 1000);
 
