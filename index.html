@@ -492,12 +492,19 @@
     document.getElementById("skipBtn").addEventListener("click", async () => {
       document.getElementById("skipBtn").disabled = true;
       // Fixed 2026-11-05 (real bug found): this used to call release_seller() here, which clears skip_until
-      // and silently dumps the lead back into the MAIN queue — the opposite of "stays in the bucket". Just
-      // browsing past a skipped lead should never change its skip status; only track it locally so the next
-      // batch fetch (p_exclude) doesn't show it again this session, same as before. The 1-hour claim set when
-      // this batch was fetched expires naturally on its own, same safety valve as everywhere else in the app.
-      if (domainMode === "skipped") { skippedSeen.push(current.seller_id); }
-      else await supabaseClient.rpc("skip_seller_for_now", { p_seller_id: current.seller_id, p_worker: worker });
+      // and silently dumps the lead back into the MAIN queue — the opposite of "stays in the bucket". Only
+      // release_seller() was removed; skip_seller_for_now() is still correct here and is called again below.
+      //
+      // Revised 2026-11-06 (real bug found): browsing past a skipped lead was only tracked LOCALLY
+      // (skippedSeen), never persisted — so after a page refresh (skippedSeen resets to []), the same lead came
+      // right back to the front, since get_next_enrichment_batch's skipped-mode order is skipped_at asc (oldest
+      // first) and nothing had ever bumped it. Fix: call skip_seller_for_now() again here too — it sets
+      // skip_until='infinity' (already was, so still "stays in the bucket") AND bumps skipped_at to now(),
+      // which is exactly "move to the back of the skip queue" without un-skipping it. skippedSeen is kept as
+      // well, purely so the same lead can't resurface within this same browser session before the new
+      // skipped_at is visible to the next batch fetch.
+      skippedSeen.push(current.seller_id);
+      await supabaseClient.rpc("skip_seller_for_now", { p_seller_id: current.seller_id, p_worker: worker });
       loadNext();
     });
 
