@@ -66,6 +66,7 @@
   /* two column groups: Sweep (Scanned..Domain %) in soft blue, Domain work (Found..Not found) in soft green */
   table.days td.g1 { background: #f1f6ff; } table.days th.g1 { background: #e3edff; color: #1e3a8a; }
   table.days td.g2 { background: #f0faf4; } table.days th.g2 { background: #dff3e7; color: #14532d; }
+  table.days td.g3 { background: #fff7ed; } table.days th.g3 { background: #ffedd5; color: #7c2d12; }
   table.days th.gs, table.days td.gs { border-left: 2px solid var(--border); }
   /* today keeps the same two colour groups as every other day; it is only bold, with an accent bar on the left */
   table.days tr.today td { font-weight: 700; }
@@ -1185,13 +1186,16 @@ Rules:
     const skipDay = {};
     (kres.data || []).forEach((r) => { skipDay[r.day] = (skipDay[r.day] || 0) + Number(r.skipped); if (!byDay[r.day]) byDay[r.day] = { found: 0, notFound: 0, by: {} }; });
     // Email-finding metric (added 2026-11-05): domains (not emails) where a human found/added or verified an
-    // email that day, per worker — tracks email-finding productivity the same way personCards already tracks
-    // domain-finding productivity. A domain with several emails saved the same day by the same person still
-    // counts once (get_email_worker_stats already dedupes by company_id per day server-side).
+    // email that day — shown as its own column in the main days table (so past days are visible, not just
+    // "today"), not a separate bigstat card. A domain with several emails saved the same day still counts once
+    // (get_email_worker_stats already dedupes by company_id per day server-side). Revised same day, user's
+    // explicit call: only show Sandeep, the one person actually working emails right now — some historical
+    // confirmed_by rows exist for Lakhan/Tushar from before (occasional manual confirms, not real email-finding
+    // work), and those should stay out of this column rather than clutter it with near-empty columns.
     const emailByDay = {};
     const emailPeople = new Set();
-    (eres.data || []).forEach((r) => { (emailByDay[r.day] = emailByDay[r.day] || {})[r.worker] = Number(r.domains); emailPeople.add(r.worker); });
-    const emailNames = [...emailPeople].sort();
+    (eres.data || []).forEach((r) => { (emailByDay[r.day] = emailByDay[r.day] || {})[r.worker] = Number(r.domains); emailPeople.add(r.worker); if (!byDay[r.day]) byDay[r.day] = { found: 0, notFound: 0, by: {} }; });
+    const emailNames = [...emailPeople].filter((n) => n === "Sandeep");
     const names = [...people].sort();
     const today = istDay(new Date());
     const days = Object.keys(byDay).sort().reverse();
@@ -1205,12 +1209,6 @@ Rules:
     const y = yKey ? byDay[yKey] : null;
     const card = (num, lbl, extra, hl) => `<div class="bigstat ${hl ? "hl" : ""}"><div class="num">${num}</div><div class="lbl">${lbl}</div>${extra || ""}</div>`;
     const personCards = names.map((n) => card(t.by[n] || 0, `Today — ${esc(n)}`, deltaHtml(t.by[n] || 0, y ? (y.by[n] || 0) : null, "yesterday"), false)).join("");
-    // Email cards use their own day keys (email activity doesn't always line up with a domain-finding day).
-    const emailDays = Object.keys(emailByDay).sort().reverse();
-    const te = emailByDay[today] || {};
-    const yEmailKey = emailDays.find((d) => d < today);
-    const ye = yEmailKey ? emailByDay[yEmailKey] : null;
-    const emailPersonCards = emailNames.map((n) => card(te[n] || 0, `Today — ${esc(n)} (Emails)`, deltaHtml(te[n] || 0, ye ? (ye[n] || 0) : null, "yesterday"), false)).join("");
     const rowsHtml = days.map((d) => {
       const r = byDay[d];
       const idx = days.indexOf(d);
@@ -1220,17 +1218,17 @@ Rules:
       const nice = new Date(d + "T00:00:00").toLocaleDateString("en-GB", { weekday: "short", day: "numeric", month: "short" });
       const ic = icpDay[d];
       const domPct = r.found + r.notFound ? Math.round((100 * r.found) / (r.found + r.notFound)) + "%" : "-";
-      return `<tr class="${d === today ? "today" : ""}"><td>${nice}${d === today ? " (today)" : ""}</td><td class="g1 gs">${ic ? ic.sellers : "-"}</td><td class="g1">${ic ? ic.icp : "-"}</td><td class="g1">${ic && ic.sellers ? Math.round((100 * ic.icp) / ic.sellers) + "%" : "-"}</td><td class="g1">${domPct}</td><td class="g2 gs">${r.found}</td>${names.map((n, i) => `<td class="g2">${r.by[n] || 0}</td>`).join("")}<td class="g2">${r.notFound}</td><td class="g2">${skipDay[d] || 0}</td><td>${dl}</td></tr>`;
+      const em = emailByDay[d] || {};
+      return `<tr class="${d === today ? "today" : ""}"><td>${nice}${d === today ? " (today)" : ""}</td><td class="g1 gs">${ic ? ic.sellers : "-"}</td><td class="g1">${ic ? ic.icp : "-"}</td><td class="g1">${ic && ic.sellers ? Math.round((100 * ic.icp) / ic.sellers) + "%" : "-"}</td><td class="g1">${domPct}</td><td class="g2 gs">${r.found}</td>${names.map((n, i) => `<td class="g2">${r.by[n] || 0}</td>`).join("")}<td class="g2">${r.notFound}</td><td class="g2">${skipDay[d] || 0}</td>${emailNames.map((n) => `<td class="g3">${em[n] || 0}</td>`).join("")}<td>${dl}</td></tr>`;
     }).join("");
     box.innerHTML = `
       <div class="bigstats">
         ${card(Number(totals.found || 0).toLocaleString(), "Domains found — overall", `<div class="delta flat">${Number(totals.pending || 0).toLocaleString()} waiting · ${Number(totals.skipped || 0).toLocaleString()} skipped</div>`, false)}
         ${card(t.found, "Domains found today", deltaHtml(t.found, y ? y.found : null, "yesterday"), true)}
         ${personCards}
-        ${emailPersonCards}
       </div>
-      <table class="days"><tr><th>Day</th><th class="g1 gs">Scanned</th><th class="g1">ICP</th><th class="g1">ICP %</th><th class="g1">Domain %</th><th class="g2 gs">Found</th>${names.map((n, i) => `<th class="g2">${esc(shortLabel(n))}</th>`).join("")}<th class="g2">Not found</th><th class="g2">Skipped</th><th>vs previous day</th></tr>${rowsHtml || `<tr><td colspan="11">No data yet</td></tr>`}</table>
-      <p class="counter" style="margin-top:10px">Scanned = sellers the sweep looked at; ICP = those that fit; Domain % = found ÷ (found + not found) that day. Found = a website was saved. Skipped = leads put in the Skip-for-now bucket that day (they stay there until you pick them from the dropdown). Days follow India time. "So far" figures for today grow through the day. Entries saved before names were tracked (before 25 Sep) are counted under Tushar. "(Emails)" cards = domains (not emails) where that person found/added or manually confirmed an email that day, from the Emails/Bulk Emails tabs — a domain with several emails saved the same day still counts once.</p>`;
+      <table class="days"><tr><th>Day</th><th class="g1 gs">Scanned</th><th class="g1">ICP</th><th class="g1">ICP %</th><th class="g1">Domain %</th><th class="g2 gs">Found</th>${names.map((n, i) => `<th class="g2">${esc(shortLabel(n))}</th>`).join("")}<th class="g2">Not found</th><th class="g2">Skipped</th>${emailNames.map((n) => `<th class="g3">${esc(n)} (Emails)</th>`).join("")}<th>vs previous day</th></tr>${rowsHtml || `<tr><td colspan="11">No data yet</td></tr>`}</table>
+      <p class="counter" style="margin-top:10px">Scanned = sellers the sweep looked at; ICP = those that fit; Domain % = found ÷ (found + not found) that day. Found = a website was saved. Skipped = leads put in the Skip-for-now bucket that day (they stay there until you pick them from the dropdown). Days follow India time. "So far" figures for today grow through the day. Entries saved before names were tracked (before 25 Sep) are counted under Tushar. "X (Emails)" = domains (not emails) where that person found/added or manually confirmed an email that day, from the Emails/Bulk Emails tabs — a domain with several emails saved the same day still counts once; only shown for whoever is actively working emails.</p>`;
   }
   setInterval(() => { if (!document.getElementById("tab-stats").hidden) loadStats2(); }, 2 * 60 * 1000);
 
